@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Vector Fury</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
@@ -20,6 +20,7 @@
             color: #0ff;
             font-family: 'Press Start 2P', cursive;
             overflow: hidden;
+            touch-action: none; /* Prevents pull-to-refresh and other touch gestures */
         }
 
         #game-container {
@@ -94,6 +95,55 @@
             to { background-position: 0 240px; }
         }
 
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none; /* Hidden by default */
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 100px;
+            z-index: 30;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mobile-controls-visible #mobile-controls {
+            display: flex;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            background-color: rgba(0, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none; /* Prevents text selection */
+        }
+        
+        .control-btn.active {
+            background-color: rgba(0, 255, 255, 0.3);
+        }
+
+        #d-pad {
+            display: flex;
+            gap: 15px;
+        }
+
+        #action-button {
+            width: 80px;
+            height: 80px;
+        }
+
+        .control-btn svg {
+            width: 50%;
+            height: 50%;
+            fill: rgba(0, 255, 255, 0.7);
+        }
+
     </style>
 </head>
 <body>
@@ -103,6 +153,23 @@
             <h1 id="message-title">VECTOR FURY</h1>
             <p id="message-text" style="font-size: 1rem;">Use Arrow Keys to Move<br>Space to Shoot</p>
             <button id="start-button">Start Game</button>
+        </div>
+        <!-- On-screen controls for mobile -->
+        <div id="mobile-controls">
+            <div id="d-pad">
+                <div class="control-btn" id="btn-left">
+                    <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+                </div>
+                <div class="control-btn" id="btn-thrust">
+                    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/></svg>
+                </div>
+                <div class="control-btn" id="btn-right">
+                    <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                </div>
+            </div>
+            <div class="control-btn" id="btn-shoot">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+            </div>
         </div>
     </div>
 
@@ -135,6 +202,7 @@
                 const synth = new Tone.NoiseSynth({
                     noise: { type: 'pink' },
                     envelope: { attack: 0.01, decay: 0.1, sustain: 0 },
+                    volume: -25
                 }).toDestination();
                 synth.triggerAttackRelease("8n", time);
             }, "16n"),
@@ -143,7 +211,6 @@
         sounds.shoot.volume.value = -15;
         sounds.explosion.volume.value = -10;
         sounds.playerDeath.volume.value = -5;
-        sounds.thrust.volume = -25;
 
 
         // --- Game Objects & State ---
@@ -251,7 +318,7 @@
                     ctx.lineWidth = 2;
                     ctx.beginPath();
                     ctx.moveTo(-this.r * 0.6, 0);
-                    ctx.lineTo(-this.r * 1.5, Math.random() * 4 - 2); // Flickering effect
+                    ctx.lineTo(-this.r * 1.5, Math.random() * 4 - 2);
                     ctx.stroke();
                 }
 
@@ -339,7 +406,7 @@
                 
                 if (bounced) {
                     this.bounces--;
-                    createExplosion(this.x, this.y, '#ff0', 2, true); // Pass true for a small explosion sound
+                    createExplosion(this.x, this.y, '#ff0', 2, true);
                 }
             }
         }
@@ -367,12 +434,10 @@
                 ctx.strokeStyle = '#f00';
                 ctx.lineWidth = 2;
 
-                // Main saucer body (ellipse)
                 ctx.beginPath();
                 ctx.ellipse(0, 0, this.r, this.r * 0.4, 0, 0, Math.PI * 2);
                 ctx.stroke();
 
-                // Top dome
                 ctx.beginPath();
                 ctx.arc(0, -this.r * 0.1, this.r * 0.5, Math.PI, 0);
                 ctx.stroke();
@@ -415,6 +480,8 @@
         function init() {
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
+
+            // Keyboard listeners
             document.addEventListener('keydown', e => {
                 keys[e.key.toLowerCase()] = true;
                 if (e.code === 'Space' && !isGameOver && !isPaused) {
@@ -435,9 +502,44 @@
             });
             document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
             
+            // --- Mobile Controls Setup ---
+            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            if (isMobile) {
+                document.body.classList.add('mobile-controls-visible');
+                
+                const btnLeft = document.getElementById('btn-left');
+                const btnRight = document.getElementById('btn-right');
+                const btnThrust = document.getElementById('btn-thrust');
+                const btnShoot = document.getElementById('btn-shoot');
+
+                const handleMove = (btn, key, start) => {
+                    btn.addEventListener(start ? 'touchstart' : 'touchend', e => {
+                        e.preventDefault();
+                        keys[key] = start;
+                        btn.classList.toggle('active', start);
+                    }, { passive: false });
+                };
+
+                handleMove(btnLeft, 'arrowleft', true);
+                handleMove(btnLeft, 'arrowleft', false);
+                handleMove(btnRight, 'arrowright', true);
+                handleMove(btnRight, 'arrowright', false);
+                handleMove(btnThrust, 'arrowup', true);
+                handleMove(btnThrust, 'arrowup', false);
+
+                btnShoot.addEventListener('touchstart', e => {
+                    e.preventDefault();
+                    if (player && !isGameOver && !isPaused) player.shoot();
+                    btnShoot.classList.add('active');
+                }, { passive: false });
+                btnShoot.addEventListener('touchend', e => {
+                    e.preventDefault();
+                    btnShoot.classList.remove('active');
+                }, { passive: false });
+            }
+
             startButton.addEventListener('click', async () => {
                 await Tone.start();
-                console.log('Audio context started');
                 startGame();
             });
 
@@ -460,15 +562,12 @@
             const numEnemies = 3 + level * 2;
             for (let i = 0; i < numEnemies; i++) { enemies.push(new Enemy()); }
         }
-
-        // UPDATED CREATE EXPLOSION FUNCTION TO PREVENT SOUND ERRORS
+        
         function createExplosion(x, y, color, count, isSmall = false) {
-            // Use Tone.now() to schedule the sound for the current moment, preventing overlaps.
-            // A small sound can be triggered for things like bullet bounces.
             if (!isSmall) {
                  sounds.explosion.triggerAttackRelease("8n", Tone.now());
             } else {
-                 sounds.explosion.triggerAttackRelease("16n", Tone.now(), 0.5); // Quieter, shorter sound
+                 sounds.explosion.triggerAttackRelease("16n", Tone.now(), 0.5);
             }
            
             for (let i = 0; i < count; i++) { particles.push(new Particle(x, y, color)); }
@@ -561,23 +660,16 @@
 
             requestAnimationFrame(gameLoop);
             
-            if (!lastFrameTime) {
-                lastFrameTime = currentTime;
-            }
-            let deltaTime = (currentTime - lastFrameTime) / 1000;
-            lastFrameTime = currentTime;
-
-
             ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
             centralObstacle.draw();
 
-            if (player) { player.update(deltaTime); player.draw(); }
+            if (player) { player.update(); player.draw(); }
             
-            bullets.forEach(b => b.update(deltaTime));
-            enemies.forEach(e => e.update(deltaTime));
-            particles.forEach(p => p.update(deltaTime));
+            bullets.forEach(b => b.update());
+            enemies.forEach(e => e.update());
+            particles.forEach(p => p.update());
             
             bullets.forEach(b => b.draw());
             enemies.forEach(e => e.draw());
