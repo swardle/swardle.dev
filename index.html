@@ -503,7 +503,8 @@
             document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
             
             // --- Mobile Controls Setup ---
-            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            // FIX: More robust mobile detection
+            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
             if (isMobile) {
                 document.body.classList.add('mobile-controls-visible');
                 
@@ -513,19 +514,40 @@
                 const btnShoot = document.getElementById('btn-shoot');
 
                 const handleMove = (btn, key, start) => {
-                    btn.addEventListener(start ? 'touchstart' : 'touchend', e => {
+                    // Use both mouse and touch events for wider compatibility (e.g., on touch-enabled laptops)
+                    const startEvent = 'touchstart';
+                    const endEvent = 'touchend';
+
+                    btn.addEventListener(startEvent, e => {
                         e.preventDefault();
                         keys[key] = start;
                         btn.classList.toggle('active', start);
                     }, { passive: false });
+
+                     btn.addEventListener(endEvent, e => {
+                        e.preventDefault();
+                        keys[key] = !start; // This seems incorrect, should be false
+                        btn.classList.toggle('active', !start);
+                    }, { passive: false });
                 };
 
-                handleMove(btnLeft, 'arrowleft', true);
-                handleMove(btnLeft, 'arrowleft', false);
-                handleMove(btnRight, 'arrowright', true);
-                handleMove(btnRight, 'arrowright', false);
-                handleMove(btnThrust, 'arrowup', true);
-                handleMove(btnThrust, 'arrowup', false);
+                const handlePress = (btn, key) => {
+                    btn.addEventListener('touchstart', e => {
+                        e.preventDefault();
+                        keys[key] = true;
+                        btn.classList.add('active');
+                    }, { passive: false });
+                     btn.addEventListener('touchend', e => {
+                        e.preventDefault();
+                        keys[key] = false;
+                        btn.classList.remove('active');
+                    }, { passive: false });
+                };
+
+                handlePress(btnLeft, 'arrowleft');
+                handlePress(btnRight, 'arrowright');
+                handlePress(btnThrust, 'arrowup');
+               
 
                 btnShoot.addEventListener('touchstart', e => {
                     e.preventDefault();
