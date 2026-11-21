@@ -1337,7 +1337,7 @@ function drawHud(ctx, frame, viewW) {
 
     var fSpec = (typeof getFighterSpec === 'function')
         ? getFighterSpec(p.fighterId || frame.fighterId)
-        : { shortName: 'RONIN', headband: '#e62e25', accent: '#ff5247', tier1Name: 'CLONE', tier2Name: 'WAVE' };
+        : { shortName: 'RONIN', headband: '#e62e25', accent: '#ff5247', tier1Name: 'SHADOW CLONE', tier2Name: 'TWIN CLONES' };
     var sTier = frame.streakTier || 0;
 
     ctx.font = 'bold 11px monospace';
