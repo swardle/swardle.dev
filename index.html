@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Vector Fury</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>swardle.dev — Arcade</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -15,579 +14,356 @@
 
         body {
             margin: 0;
-            padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding: max(24px, env(safe-area-inset-top, 24px)) 18px max(32px, env(safe-area-inset-bottom, 32px));
+            background: radial-gradient(circle at 50% 0%, #16141f 0%, #07070a 65%);
+            color: #eef2f5;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            height: 100vh;
-            height: 100dvh;
-            background-color: #000;
-            color: #0ff;
-            font-family: 'Press Start 2P', monospace;
-            overflow: hidden;
-            touch-action: none;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
+            justify-content: center;
         }
 
-        #game-container {
-            position: relative;
-            width: 90vw;
-            height: 80vh;
-            height: 80dvh;
-            max-width: 1000px;
-            max-height: 800px;
-            border: 3px solid #0ff;
-            box-shadow: 0 0 20px #0ff, inset 0 0 20px #0ff;
-            background-color: #020202;
-            overflow: hidden;
+        .hub {
+            width: 100%;
+            max-width: 980px;
         }
 
-        @media (max-width: 768px) {
-            #game-container {
-                width: 96vw;
-                height: 92vh;
-                height: 92dvh;
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .site-tag {
+            font-size: 0.78rem;
+            letter-spacing: 0.25em;
+            color: #9aa4b2;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        header h1 {
+            margin: 0 0 10px 0;
+            font-family: 'Press Start 2P', ui-monospace, monospace;
+            font-size: clamp(1.35rem, 4vw, 2.2rem);
+            color: #ffffff;
+            text-shadow: 0 0 18px rgba(0, 255, 255, 0.35), 0 0 24px rgba(217, 40, 40, 0.35);
+            letter-spacing: 0.08em;
+        }
+
+        header p {
+            margin: 0;
+            color: #b4becb;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 22px;
+        }
+
+        @media (max-width: 720px) {
+            .games-grid {
+                grid-template-columns: 1fr;
             }
         }
 
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            background-color: transparent;
-        }
-
-        /* Scanlines effect */
-        #game-container::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 98%, rgba(255,255,255,0.16) 99%, rgba(0,0,0,0) 100%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            animation: scanlines 1s steps(60) infinite;
-            z-index: 15;
-        }
-
-        @keyframes scanlines {
-            from { background-position: 0 0; }
-            to { background-position: 0 240px; }
-        }
-
-        /* Top-right HUD utility controls */
-        #top-hud {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            display: flex;
-            gap: 8px;
-            z-index: 40;
-        }
-
-        .hud-btn {
-            padding: 6px 10px;
-            font-family: 'Press Start 2P', monospace;
-            font-size: 0.65rem;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: #0ff;
-            border: 1px solid #0ff;
-            cursor: pointer;
-            box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
-        }
-
-        .hud-btn:hover {
-            background-color: #0ff;
-            color: #000;
-        }
-
-        #hud-replay-btn {
-            color: #f0f;
-            border-color: #f0f;
-            box-shadow: 0 0 6px rgba(255, 0, 255, 0.4);
-        }
-
-        #hud-replay-btn:hover {
-            background-color: #f0f;
-            color: #000;
-        }
-
-        /* Center Message Overlay (Title / Pause / Game Over) */
-        #message-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #ff0;
-            font-size: 2rem;
-            text-align: center;
-            text-shadow: 0 0 10px #ff0;
+        .game-card {
+            position: relative;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            border-radius: 10px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+
+        .game-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .card-art {
+            position: relative;
+            height: 185px;
+            display: flex;
             align-items: center;
-            z-index: 25;
-            background: rgba(0, 0, 0, 0.72);
-            padding: 24px 32px;
-            border: 2px solid rgba(255, 255, 0, 0.4);
-            max-width: 90%;
+            justify-content: center;
+            overflow: hidden;
         }
 
-        #message-overlay h1 {
-            margin: 0 0 16px 0;
-            font-size: 2rem;
+        .card-body {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 10px;
         }
 
-        #message-overlay p {
-            margin: 0 0 10px 0;
-            font-size: 0.85rem;
-            line-height: 1.7;
+        .card-genre {
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            opacity: 0.85;
         }
 
-        .overlay-actions {
+        .card-title {
+            margin: 0;
+            font-size: 1.35rem;
+            letter-spacing: 0.06em;
+        }
+
+        .card-desc {
+            margin: 0;
+            font-size: 0.84rem;
+            line-height: 1.55;
+            opacity: 0.9;
+            flex: 1;
+        }
+
+        .card-features {
             display: flex;
             flex-wrap: wrap;
-            justify-content: center;
-            gap: 12px;
-            margin-top: 14px;
+            gap: 6px;
+            margin-top: 4px;
         }
 
-        #message-overlay button {
-            padding: 10px 18px;
-            font-family: 'Press Start 2P', monospace;
-            font-size: 0.9rem;
-            background-color: #000;
-            color: #ff0;
-            border: 2px solid #ff0;
-            cursor: pointer;
-            box-shadow: 0 0 10px #ff0;
+        .pill {
+            font-size: 0.68rem;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid currentColor;
+            opacity: 0.85;
+        }
+
+        .card-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+            align-items: center;
+        }
+
+        .play-btn {
+            display: inline-block;
+            padding: 11px 20px;
+            font-weight: bold;
+            font-size: 0.84rem;
+            letter-spacing: 0.08em;
+            text-decoration: none;
+            border-radius: 4px;
             transition: all 0.15s ease;
         }
 
-        #message-overlay button:hover {
-            background-color: #ff0;
-            color: #000;
+        .test-link {
+            font-size: 0.74rem;
+            text-decoration: none;
+            opacity: 0.78;
+            padding: 6px 8px;
         }
 
-        #gameover-replay-btn {
-            color: #f0f !important;
-            border-color: #f0f !important;
-            box-shadow: 0 0 10px #f0f !important;
+        .test-link:hover {
+            opacity: 1;
+            text-decoration: underline;
         }
 
-        #gameover-replay-btn:hover {
-            background-color: #f0f !important;
-            color: #000 !important;
-        }
-
-        /* Non-Gameplay Menu Modal (Saved Input & Dev Determinism) */
-        #menu-modal {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.88);
-            z-index: 60;
-            justify-content: center;
-            align-items: center;
-            padding: 16px;
-        }
-
-        .menu-panel {
-            width: 100%;
-            max-width: 560px;
-            max-height: 92%;
-            overflow-y: auto;
-            background: #04080a;
+        /* Card 1: Vector Fury (Neon Arcade) */
+        .card-vf {
+            background: #04090c;
             border: 2px solid #0ff;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-            padding: 18px;
-            color: #0ff;
-            font-size: 0.7rem;
-            line-height: 1.6;
+            box-shadow: 0 0 22px rgba(0, 255, 255, 0.22);
         }
 
-        .menu-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(0, 255, 255, 0.4);
-            padding-bottom: 10px;
-            margin-bottom: 14px;
+        .card-vf:hover {
+            box-shadow: 0 0 32px rgba(0, 255, 255, 0.48);
         }
 
-        .menu-header h2 {
-            margin: 0;
-            font-size: 0.95rem;
-            color: #ff0;
+        .card-vf .card-art {
+            background:
+                repeating-linear-gradient(to bottom, rgba(0,255,255,0.06) 0px, rgba(0,255,255,0.06) 1px, transparent 1px, transparent 4px),
+                radial-gradient(circle at 50% 50%, #09242b 0%, #020507 78%);
+            border-bottom: 1px solid rgba(0, 255, 255, 0.35);
         }
 
-        .menu-section {
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(0, 255, 255, 0.25);
-        }
-
-        .menu-section:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-
-        .menu-section h3 {
-            margin: 0 0 10px 0;
-            font-size: 0.78rem;
-            color: #0ff;
-        }
-
-        .menu-status {
-            color: #ccc;
-            font-family: monospace;
-            font-size: 0.85rem;
-            margin: 0 0 10px 0;
-        }
-
-        .menu-btn-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .menu-btn {
-            padding: 8px 12px;
+        .card-vf .card-genre { color: #0ff; }
+        .card-vf .card-title {
             font-family: 'Press Start 2P', monospace;
-            font-size: 0.62rem;
-            background: #000;
-            color: #0ff;
-            border: 1px solid #0ff;
-            cursor: pointer;
-        }
-
-        .menu-btn:hover:not(:disabled) {
-            background: #0ff;
-            color: #000;
-        }
-
-        .menu-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .menu-btn.warn {
+            font-size: 1.15rem;
             color: #ff0;
-            border-color: #ff0;
+            text-shadow: 0 0 10px rgba(255, 255, 0, 0.55);
         }
-
-        .menu-btn.warn:hover:not(:disabled) {
+        .card-vf .pill { color: #0ff; }
+        .card-vf .play-btn {
+            background: #000;
+            color: #ff0;
+            border: 2px solid #ff0;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.35);
+        }
+        .card-vf .play-btn:hover {
             background: #ff0;
             color: #000;
         }
+        .card-vf .test-link { color: #0ff; }
 
-        #menu-feedback {
-            font-family: monospace;
-            font-size: 0.82rem;
-            color: #ff0;
-            min-height: 1.2em;
+        /* Card 2: Shadow Pagoda (Sumi-e Ink-Brush Kung Fu) */
+        .card-kf {
+            background: #120909;
+            border: 2px solid #d92828;
+            box-shadow: 0 0 22px rgba(217, 40, 40, 0.26);
         }
 
-        .dev-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            color: #aef;
-            margin-bottom: 10px;
-            cursor: pointer;
+        .card-kf:hover {
+            box-shadow: 0 0 34px rgba(217, 40, 40, 0.52);
         }
 
-        .dev-report {
-            background: #000;
-            border: 1px solid #444;
-            padding: 8px;
-            font-family: monospace;
-            font-size: 0.8rem;
-            white-space: pre-wrap;
-            color: #ccc;
-            min-height: 44px;
-            max-height: 160px;
-            overflow-y: auto;
+        .card-kf .card-art {
+            background: linear-gradient(to bottom, #240b0e 0%, #7d201a 58%, #e07a3b 100%);
+            border-bottom: 1px solid rgba(217, 40, 40, 0.45);
         }
 
-        .dev-report.ok {
-            border-color: #0f0;
-            color: #0f0;
+        .card-kf .card-genre { color: #ffd24c; }
+        .card-kf .card-title {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 1.5rem;
+            color: #ffe7b3;
+            text-shadow: 0 2px 12px rgba(217, 40, 40, 0.7);
+        }
+        .card-kf .pill { color: #ffd24c; }
+        .card-kf .play-btn {
+            background: #1c0909;
+            color: #ffe7b3;
+            border: 2px solid #d92828;
+            box-shadow: 0 0 10px rgba(217, 40, 40, 0.4);
+        }
+        .card-kf .play-btn:hover {
+            background: #d92828;
+            color: #fff;
+        }
+        .card-kf .test-link { color: #ffd24c; }
+
+        footer {
+            margin-top: 26px;
+            text-align: center;
+            font-size: 0.76rem;
+            color: #8490a0;
         }
 
-        .dev-report.error {
-            border-color: #f44;
-            color: #f66;
-        }
-
-        /* In-Game Replay Control Bar */
-        #replay-bar {
-            display: none;
-            position: absolute;
-            left: 10px;
-            right: 10px;
-            bottom: 10px;
-            background: rgba(6, 0, 12, 0.92);
-            border: 2px solid #f0f;
-            box-shadow: 0 0 14px rgba(255, 0, 255, 0.5);
-            padding: 10px 12px;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 50;
-        }
-
-        .replay-top-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.62rem;
-            color: #f0f;
-        }
-
-        #replay-scrubber {
-            width: 100%;
-            accent-color: #f0f;
-            cursor: pointer;
-        }
-
-        .replay-controls-row {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .replay-btn-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-
-        .replay-btn {
-            padding: 5px 8px;
-            font-family: 'Press Start 2P', monospace;
-            font-size: 0.55rem;
-            background: #000;
-            color: #f0f;
-            border: 1px solid #f0f;
-            cursor: pointer;
-        }
-
-        .replay-btn:hover,
-        .replay-btn.active {
-            background: #f0f;
-            color: #000;
-        }
-
-        #replay-play-here-btn {
-            color: #0f0;
-            border-color: #0f0;
-        }
-
-        #replay-play-here-btn:hover {
-            background: #0f0;
-            color: #000;
-        }
-
-        #replay-exit-btn {
-            color: #0ff;
-            border-color: #0ff;
-        }
-
-        #replay-exit-btn:hover {
-            background: #0ff;
-            color: #000;
-        }
-
-        /* Mobile Controls */
-        #mobile-controls {
-            display: none;
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
-            height: 100px;
-            z-index: 30;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .mobile-controls-visible #mobile-controls {
-            display: flex;
-        }
-
-        .replay-mode-active #mobile-controls,
-        .menu-modal-open #mobile-controls {
-            display: none !important;
-        }
-
-        .control-btn {
-            width: 60px;
-            height: 60px;
-            border: 2px solid rgba(0, 255, 255, 0.5);
-            background-color: rgba(0, 255, 255, 0.1);
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-            touch-action: none;
-        }
-
-        .control-btn.active {
-            background-color: rgba(0, 255, 255, 0.35);
-        }
-
-        #d-pad {
-            display: flex;
-            gap: 15px;
-        }
-
-        #btn-shoot {
-            width: 80px;
-            height: 80px;
-        }
-
-        .control-btn svg {
-            width: 50%;
-            height: 50%;
-            fill: rgba(0, 255, 255, 0.7);
+        footer span {
+            color: #c2ccd8;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
+    <main class="hub">
+        <header>
+            <div class="site-tag">swardle.dev</div>
+            <h1>SELECT GAME</h1>
+            <p>Cross-platform HTML5 Arcade &bull; iOS, Android, Windows &amp; macOS &bull; Deterministic Saved Input &amp; In-Game Replay</p>
+        </header>
 
-        <!-- Top-right HUD controls -->
-        <div id="top-hud">
-            <button class="hud-btn" id="hud-replay-btn" style="display:none;" title="In-Game Replay (R)">REPLAY [R]</button>
-            <button class="hud-btn" id="hud-menu-btn" title="Saved Input &amp; Menu (Esc)">MENU</button>
-        </div>
-
-        <!-- Title / Pause / Game Over Overlay -->
-        <div id="message-overlay">
-            <h1 id="message-title">VECTOR FURY</h1>
-            <p id="message-text">Arrow Keys / WASD to Move &bull; Space to Shoot<br>P to Pause &bull; R for Replay &bull; Esc for Menu</p>
-            <div class="overlay-actions">
-                <button id="start-button">Start Game</button>
-                <button id="demo-button">Watch AI Demo</button>
-                <button id="gameover-replay-btn" style="display:none;">Watch Replay</button>
-                <button id="gameover-save-btn" style="display:none;">Save Input</button>
-            </div>
-        </div>
-
-        <!-- Non-Gameplay Menu (Saved Input + Dev Determinism Tools) -->
-        <div id="menu-modal">
-            <div class="menu-panel">
-                <div class="menu-header">
-                    <h2>GAME MENU</h2>
-                    <button class="menu-btn" id="menu-close-btn">CLOSE [ESC]</button>
+        <section class="games-grid">
+            <!-- Game 1: Vector Fury -->
+            <div class="game-card card-vf">
+                <div class="card-art" aria-hidden="true">
+                    <svg viewBox="0 0 360 180" width="100%" height="100%">
+                        <rect x="132" y="64" width="96" height="52" fill="none" stroke="#0ff" stroke-width="2.5" opacity="0.65"/>
+                        <!-- Player Ship -->
+                        <polygon points="88,90 60,77 67,90 60,103" fill="none" stroke="#0ff" stroke-width="3"/>
+                        <polygon points="62,85 48,90 62,95" fill="#ff8800" opacity="0.9"/>
+                        <!-- Ricochet laser -->
+                        <polyline points="92,90 132,76 170,22 250,62" fill="none" stroke="#ff0" stroke-width="2.2" stroke-dasharray="6,4"/>
+                        <circle cx="250" cy="62" r="4" fill="#ff0"/>
+                        <!-- Enemy triangles -->
+                        <polygon points="282,62 264,52 264,72" fill="none" stroke="#f0f" stroke-width="2.5"/>
+                        <polygon points="298,128 278,118 282,138" fill="none" stroke="#f0f" stroke-width="2.5"/>
+                    </svg>
                 </div>
-
-                <div class="menu-section">
-                    <h3>SAVED INPUT (DETERMINISTIC PLAYBACK)</h3>
-                    <p class="menu-status" id="input-status-text">Ready</p>
-                    <div class="menu-btn-row">
-                        <button class="menu-btn" id="save-input-btn">Save Input File</button>
-                        <button class="menu-btn" id="load-input-btn">Load &amp; Play Input</button>
-                        <button class="menu-btn" id="menu-demo-btn">Start AI Demo</button>
-                        <button class="menu-btn warn" id="stop-playback-btn" style="display:none;">Stop Playback</button>
-                        <input type="file" id="load-input-file" accept=".json,application/json,text/plain" style="display:none;">
+                <div class="card-body">
+                    <div class="card-genre">Neon Arena Shooter</div>
+                    <h2 class="card-title">VECTOR FURY</h2>
+                    <p class="card-desc">Pilot a retro vector starfighter, ricochet shots off walls and barriers, and survive escalating hunter waves.</p>
+                    <div class="card-features">
+                        <span class="pill">60Hz Deterministic</span>
+                        <span class="pill">Saved Input</span>
+                        <span class="pill">Slow-Mo Replay</span>
                     </div>
-                    <div id="menu-feedback"></div>
-                </div>
-
-                <div class="menu-section" id="dev-section" style="display:none;">
-                    <h3>DEV DETERMINISM LOGGER (?dev=1)</h3>
-                    <p class="menu-status" id="dev-live-hash">No active simulation</p>
-                    <label class="dev-checkbox">
-                        <input type="checkbox" id="dev-include-hashes" checked>
-                        Include per-tick state hashes in saved input file
-                    </label>
-                    <div class="menu-btn-row">
-                        <button class="menu-btn warn" id="dev-fast-verify-btn">Fast Verify Determinism</button>
-                        <button class="menu-btn warn" id="dev-ai-test-btn">Run AI Integration Test</button>
-                        <button class="menu-btn" id="dev-download-log-btn">Download Debug Log</button>
+                    <div class="card-actions">
+                        <a class="play-btn game-link" href="vector-fury/">PLAY VECTOR FURY</a>
+                        <a class="test-link" href="vector-fury/tests.html">Tests</a>
                     </div>
-                    <div class="dev-report" id="dev-report-box">Ready. Save or load an input file to verify tick-by-tick determinism.</div>
                 </div>
             </div>
-        </div>
 
-        <!-- In-Game Replay Controls -->
-        <div id="replay-bar">
-            <div class="replay-top-row">
-                <span>IN-GAME REPLAY (Enter = Play Here, Space = Play/Pause, Arrows = Step)</span>
-                <span id="replay-info-text">TICK 0.00</span>
+            <!-- Game 2: Shadow Pagoda -->
+            <div class="game-card card-kf">
+                <div class="card-art" aria-hidden="true">
+                    <svg viewBox="0 0 360 180" width="100%" height="100%">
+                        <!-- Sunset Moon -->
+                        <circle cx="242" cy="70" r="42" fill="#ffe7b3" opacity="0.92"/>
+                        <!-- Mountain ink ridge -->
+                        <path d="M0,152 Q70,104 135,126 T275,112 T360,136 L360,180 L0,180 Z" fill="#1b0a0a" opacity="0.72"/>
+                        <!-- Ground -->
+                        <rect x="0" y="148" width="360" height="32" fill="#120808"/>
+                        <!-- Martial artist silhouette (flying kick!) -->
+                        <g stroke="#0b0808" stroke-linecap="round" fill="#0b0808">
+                            <circle cx="130" cy="78" r="8"/>
+                            <path d="M126,86 L142,108 L130,114 L118,92 Z"/>
+                            <line x1="138" y1="106" x2="178" y2="100" stroke-width="6.5"/>
+                            <line x1="128" y1="110" x2="112" y2="128" stroke-width="6"/>
+                            <line x1="126" y1="90" x2="104" y2="96" stroke-width="5"/>
+                            <line x1="134" y1="92" x2="152" y2="86" stroke-width="5"/>
+                        </g>
+                        <!-- Crimson headband -->
+                        <path d="M122,76 Q104,70 92,77" fill="none" stroke="#e62e25" stroke-width="3" stroke-linecap="round"/>
+                        <!-- Gold/Red Brush Slash Arc -->
+                        <path d="M174,72 A38,38 0 0,1 186,124" fill="none" stroke="#ffd24c" stroke-width="6" stroke-linecap="round"/>
+                        <path d="M178,76 A34,34 0 0,1 188,120" fill="none" stroke="#fff3d6" stroke-width="2" stroke-linecap="round"/>
+                        <!-- Enemy Monk silhouette with conical hat -->
+                        <g stroke="#0b0808" stroke-linecap="round" fill="#0b0808">
+                            <polygon points="222,86 244,74 266,86"/>
+                            <circle cx="244" cy="92" r="7"/>
+                            <rect x="236" y="100" width="16" height="24"/>
+                            <line x1="240" y1="124" x2="232" y2="148" stroke-width="6"/>
+                            <line x1="248" y1="124" x2="256" y2="148" stroke-width="6"/>
+                        </g>
+                    </svg>
+                </div>
+                <div class="card-body">
+                    <div class="card-genre">Sumi-e Kung Fu Beat-'Em-Up</div>
+                    <h2 class="card-title">SHADOW PAGODA</h2>
+                    <p class="card-desc">Battle through moonlit pagoda floors! Chain 3-hit combos, leap over traps, deflect knives with Perfect Parries, and defeat floor masters.</p>
+                    <div class="card-features">
+                        <span class="pill">Touch &amp; Keyboard</span>
+                        <span class="pill">Saved Input</span>
+                        <span class="pill">Slow-Mo Replay</span>
+                    </div>
+                    <div class="card-actions">
+                        <a class="play-btn game-link" href="kung-fu/">PLAY SHADOW PAGODA</a>
+                        <a class="test-link" href="kung-fu/tests.html">Tests</a>
+                    </div>
+                </div>
             </div>
-            <input type="range" id="replay-scrubber" min="0" max="0" step="0.05" value="0">
-            <div class="replay-controls-row">
-                <div class="replay-btn-group">
-                    <button class="replay-btn replay-speed-btn" data-speed="-2">-2x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="-1">-1x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="-0.25">-0.25x</button>
-                    <button class="replay-btn replay-speed-btn active" data-speed="0">PAUSE</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="0.25">0.25x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="0.5">0.5x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="1">1x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="2">2x</button>
-                </div>
-                <div class="replay-btn-group">
-                    <button class="replay-btn" id="replay-step-back" title="Step back 1 frame">-1f</button>
-                    <button class="replay-btn" id="replay-step-sub-back" title="Step back 0.25 frame">-0.25f</button>
-                    <button class="replay-btn" id="replay-step-sub-fwd" title="Step forward 0.25 frame">+0.25f</button>
-                    <button class="replay-btn" id="replay-step-fwd" title="Step forward 1 frame">+1f</button>
-                </div>
-                <div class="replay-btn-group">
-                    <button class="replay-btn" id="replay-play-here-btn">PLAY FROM HERE</button>
-                    <button class="replay-btn" id="replay-exit-btn">EXIT [R]</button>
-                </div>
-            </div>
-        </div>
+        </section>
 
-        <!-- On-screen controls for mobile -->
-        <div id="mobile-controls">
-            <div id="d-pad">
-                <div class="control-btn" id="btn-left">
-                    <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
-                </div>
-                <div class="control-btn" id="btn-thrust">
-                    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/></svg>
-                </div>
-                <div class="control-btn" id="btn-right">
-                    <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
-                </div>
-            </div>
-            <div class="control-btn" id="btn-shoot">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-            </div>
-        </div>
-    </div>
+        <footer>
+            Tip: Add <span>?dev=1</span> to either game URL for live FNV-1a determinism verification.
+        </footer>
+    </main>
 
-    <!-- Simple vanilla JS modules in dependency order (no build step) -->
-    <script src="js/math.js"></script>
-    <script src="js/rng.js"></script>
-    <script src="js/input.js"></script>
-    <script src="js/sim.js"></script>
-    <script src="js/ai.js"></script>
-    <script src="js/replay.js"></script>
-    <script src="js/debug.js"></script>
-    <script src="js/audio.js"></script>
-    <script src="js/render.js"></script>
-    <script src="js/main.js"></script>
+    <script>
+        // Preserve ?dev=1 query flag when navigating from the Arcade Hub into a game
+        (function () {
+            if (window.location.search) {
+                var links = document.querySelectorAll('a.game-link');
+                for (var i = 0; i < links.length; i++) {
+                    links[i].href = links[i].getAttribute('href') + window.location.search;
+                }
+            }
+        })();
+    </script>
 </body>
 </html>

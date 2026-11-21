@@ -1,5 +1,5 @@
 // ============================================================================
-// tests/run_tests.js - Zero-Dependency Node.js CLI Test Runner
+// tests/run_tests.js - Zero-Dependency Node.js CLI Test Runner (All Games)
 //
 // Uses only Node built-ins (fs, path, vm). Runs on Linux, macOS, and Windows:
 //   node tests/run_tests.js
@@ -12,21 +12,29 @@ var path = require('path');
 var vm   = require('vm');
 
 var repoRoot = path.resolve(__dirname, '..');
-var jsDir    = path.join(repoRoot, 'js');
 
-// 1. Syntax-check every JS file in js/ and tests/
+// 1. Syntax-check every JS file across shared/, vector-fury/, kung-fu/, tests/
 var allJsFiles = [
-    'js/math.js',
-    'js/rng.js',
-    'js/input.js',
-    'js/sim.js',
-    'js/ai.js',
-    'js/replay.js',
-    'js/debug.js',
-    'js/audio.js',
-    'js/render.js',
-    'js/main.js',
-    'tests/suite.js'
+    'shared/math.js',
+    'shared/rng.js',
+    'vector-fury/js/input.js',
+    'vector-fury/js/sim.js',
+    'vector-fury/js/ai.js',
+    'vector-fury/js/replay.js',
+    'vector-fury/js/debug.js',
+    'vector-fury/js/audio.js',
+    'vector-fury/js/render.js',
+    'vector-fury/js/main.js',
+    'kung-fu/js/input.js',
+    'kung-fu/js/sim.js',
+    'kung-fu/js/ai.js',
+    'kung-fu/js/replay.js',
+    'kung-fu/js/debug.js',
+    'kung-fu/js/audio.js',
+    'kung-fu/js/render.js',
+    'kung-fu/js/main.js',
+    'tests/vector_fury_suite.js',
+    'tests/kung_fu_suite.js'
 ];
 
 var syntaxErrors = 0;
@@ -48,56 +56,76 @@ if (syntaxErrors > 0) {
 }
 console.log('[PASS] Syntax check (' + allJsFiles.length + ' JS files)');
 
-// 2. Load headless game modules + shared test suite into a clean VM context
-var sandbox = vm.createContext({
-    console: console,
-    Math: Math,
-    Float64Array: Float64Array,
-    Uint32Array: Uint32Array,
-    Date: Date,
-    Array: Array,
-    Object: Object,
-    JSON: JSON,
-    Error: Error,
-    Number: Number,
-    String: String,
-    performance: (typeof performance !== 'undefined') ? performance : { now: function () { return Date.now(); } },
-    URLSearchParams: function () { this.get = function (k) { return k === 'dev' ? '1' : null; }; },
-    window: { location: { search: '?dev=1' } }
-});
-
-var loadOrder = [
-    'js/math.js',
-    'js/rng.js',
-    'js/input.js',
-    'js/sim.js',
-    'js/ai.js',
-    'js/replay.js',
-    'js/debug.js',
-    'js/render.js',
-    'tests/suite.js'
-];
-
-for (var j = 0; j < loadOrder.length; j++) {
-    var file = loadOrder[j];
-    var code = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-    vm.runInContext(code, sandbox, { filename: file });
+function createCleanSandbox() {
+    return vm.createContext({
+        console: console,
+        Math: Math,
+        Float64Array: Float64Array,
+        Uint32Array: Uint32Array,
+        Date: Date,
+        Array: Array,
+        Object: Object,
+        JSON: JSON,
+        Error: Error,
+        Number: Number,
+        String: String,
+        performance: (typeof performance !== 'undefined') ? performance : { now: function () { return Date.now(); } },
+        URLSearchParams: function () { this.get = function (k) { return k === 'dev' ? '1' : null; }; },
+        window: { location: { search: '?dev=1' } }
+    });
 }
 
-// 3. Execute shared test suite
-var report = sandbox.runSharedTestSuite();
+function runSuite(title, loadOrder, entryFnName) {
+    console.log('\n=== ' + title + ' ===');
+    var sandbox = createCleanSandbox();
+    for (var j = 0; j < loadOrder.length; j++) {
+        var file = loadOrder[j];
+        var code = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+        vm.runInContext(code, sandbox, { filename: file });
+    }
 
-for (var k = 0; k < report.results.length; k++) {
-    var r = report.results[k];
-    var tag = r.passed ? '[PASS]' : '[FAIL]';
-    console.log(tag + ' ' + r.name + ' (' + r.ms + ' ms) - ' + r.detail);
+    var report = sandbox[entryFnName]();
+    for (var k = 0; k < report.results.length; k++) {
+        var r = report.results[k];
+        var tag = r.passed ? '[PASS]' : '[FAIL]';
+        console.log(tag + ' ' + r.name + ' (' + r.ms + ' ms) - ' + r.detail);
+    }
+    console.log('Fingerprint: ' + report.fingerprint);
+    console.log('Subtotal:    ' + report.passed + ' / ' + report.total + ' passed');
+    return report;
 }
 
-console.log('------------------------------------------------------------');
-console.log('Platform:    ' + process.platform + ' ' + process.arch + ' | Node ' + process.version);
-console.log('Fingerprint: ' + report.fingerprint);
-console.log('Summary:     ' + report.passed + ' / ' + report.total + ' passed');
+var vfReport = runSuite('VECTOR FURY', [
+    'shared/math.js',
+    'shared/rng.js',
+    'vector-fury/js/input.js',
+    'vector-fury/js/sim.js',
+    'vector-fury/js/ai.js',
+    'vector-fury/js/replay.js',
+    'vector-fury/js/debug.js',
+    'vector-fury/js/render.js',
+    'tests/vector_fury_suite.js'
+], 'runSharedTestSuite');
 
-if (!report.ok) {
+var kfReport = runSuite('SHADOW PAGODA (KUNG FU)', [
+    'shared/math.js',
+    'shared/rng.js',
+    'kung-fu/js/input.js',
+    'kung-fu/js/sim.js',
+    'kung-fu/js/ai.js',
+    'kung-fu/js/replay.js',
+    'kung-fu/js/debug.js',
+    'kung-fu/js/render.js',
+    'tests/kung_fu_suite.js'
+], 'runKungFuTestSuite');
+
+var totalPassed = vfReport.passed + kfReport.passed;
+var totalCount = vfReport.total + kfReport.total;
+
+console.log('\n------------------------------------------------------------');
+console.log('Platform: ' + process.platform + ' ' + process.arch + ' | Node ' + process.version);
+console.log('Summary:  ' + totalPassed + ' / ' + totalCount + ' passed across 2 games');
+
+if (!vfReport.ok || !kfReport.ok) {
     process.exit(1);
 }

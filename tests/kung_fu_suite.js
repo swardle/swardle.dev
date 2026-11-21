@@ -1,0 +1,287 @@
+// ============================================================================
+// tests/kung_fu_suite.js - Shadow Pagoda Zero-Dependency Test Suite
+//
+// Runs identically in:
+//   - Any browser (Windows, macOS, iOS, Android) via kung-fu/tests.html
+//   - Command line / CI (Windows, macOS, Linux) via node tests/run_tests.js
+// ============================================================================
+
+// Golden hashes locked against deterministic shared/math.js + shared/rng.js +
+// kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
+var KF_GOLDEN_AI_SEED_1_HASH = '0x0142de87'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0x08b0de1b'; // 0xD3000001, 2400 ticks
+
+function kfAssert(cond, msg) {
+    if (!cond) {
+        throw new Error(msg || 'Assertion failed');
+    }
+}
+
+function kfAssertNear(actual, expected, tol, label) {
+    var diff = Math.abs(actual - expected);
+    if (!(diff <= tol)) {
+        throw new Error(label + ': expected ' + expected + ' (+/- ' + tol + '), got ' + actual);
+    }
+}
+
+function runKungFuTestSuite() {
+    var results = [];
+    var fingerprintParts = [];
+
+    function runCase(name, fn) {
+        var t0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+        try {
+            var detail = fn() || 'OK';
+            var t1 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+            results.push({
+                name: name,
+                passed: true,
+                detail: detail,
+                ms: Math.round((t1 - t0) * 100) / 100
+            });
+        } catch (err) {
+            var tErr = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+            results.push({
+                name: name,
+                passed: false,
+                detail: err && err.message ? err.message : String(err),
+                ms: Math.round((tErr - t0) * 100) / 100
+            });
+        }
+    }
+
+    // 1. Input Sampling, Edge-Triggered Jump/Attack, Touch, & RLE Serialization
+    runCase('Input 5-bit mask, edge latches, touch, & RLE round-trip', function () {
+        var live = createLiveInput();
+        liveInputKeyDown(live, 'ArrowRight', 'ArrowRight', false);
+        liveInputKeyDown(live, ' ', 'Space', false);
+        liveInputKeyDown(live, 'w', 'KeyW', false);
+        var m1 = sampleLiveInput(live);
+        kfAssert(m1 === (INPUT_RIGHT | INPUT_ATTACK | INPUT_JUMP), 'Expected RIGHT|ATTACK|JUMP, got ' + m1);
+
+        // Repeat events must not re-fire edge-triggered jump/attack
+        liveInputKeyDown(live, ' ', 'Space', true);
+        liveInputKeyDown(live, 'w', 'KeyW', true);
+        var m2 = sampleLiveInput(live);
+        kfAssert(m2 === INPUT_RIGHT, 'Expected RIGHT only on key repeat, got ' + m2);
+
+        // Touch multi-button + clear
+        liveInputTouchButton(live, 'block', true);
+        liveInputTouchButton(live, 'attack', true);
+        var m3 = sampleLiveInput(live);
+        kfAssert(m3 === (INPUT_RIGHT | INPUT_BLOCK | INPUT_ATTACK), 'Expected touch combo mask, got ' + m3);
+
+        clearLiveInput(live);
+        kfAssert(sampleLiveInput(live) === INPUT_NONE, 'clearLiveInput failed to reset state');
+
+        var rec = createInputRecording({ seed: 999, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        rec.frames = [0, 2, 2, 2, 10, 16, 16, 4, 8, 0];
+        var json = serializeInputRecording(rec, null);
+        var parsed = deserializeInputRecording(json);
+        kfAssert(parsed.frames.length === rec.frames.length, 'RLE length mismatch');
+        for (var i = 0; i < rec.frames.length; i++) {
+            kfAssert(parsed.frames[i] === rec.frames[i], 'RLE mismatch at tick ' + i);
+        }
+        return '5-bit masks + touch + RLE (' + json.length + ' bytes) OK';
+    });
+
+    // 2. 3-Hit Combo Chain, Jump Kick, & Enemy Defeat
+    runCase('Player 3-hit combo, jump kick, & enemy KO', function () {
+        var sim = createSimState({ seed: 101, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        sim.player.x = 200;
+        var dummy = spawnEnemy(sim, 'staff', 250, -1); // 42 HP takes 3-hit combo!
+        dummy.cooldown = 999;
+
+        // Attack 1 -> chain Attack 2 -> chain Attack 3
+        stepSimulation(sim, INPUT_ATTACK);
+        kfAssert(sim.player.action === 'attack1', 'Expected attack1, got ' + sim.player.action);
+        for (var i = 0; i < 16; i++) stepSimulation(sim, INPUT_NONE);
+
+        stepSimulation(sim, INPUT_ATTACK);
+        kfAssert(sim.player.action === 'attack2', 'Expected attack2 chain, got ' + sim.player.action);
+        for (var j = 0; j < 20; j++) stepSimulation(sim, INPUT_NONE);
+
+        stepSimulation(sim, INPUT_ATTACK);
+        kfAssert(sim.player.action === 'attack3', 'Expected attack3 finisher, got ' + sim.player.action);
+        for (var k = 0; k < 35; k++) stepSimulation(sim, INPUT_NONE);
+
+        kfAssert(sim.enemies.length === 0 && sim.enemiesDefeated === 1, 'Expected staff monk defeated by 3-hit combo');
+        kfAssert(sim.score > 0, 'Expected positive score after KO');
+        kfAssert(sim.player.action === 'idle' && sim.player.onGround, 'Expected player returned to idle on ground');
+
+        // Jump + Air Kick
+        stepSimulation(sim, INPUT_JUMP);
+        kfAssert(!sim.player.onGround, 'Expected player airborne after jump');
+        stepSimulation(sim, INPUT_ATTACK);
+        kfAssert(sim.player.action === 'airkick', 'Expected airkick while airborne, got ' + sim.player.action);
+        return '3-hit combo KO + airkick verified, score=' + sim.score;
+    });
+
+    // 3. Perfect Parry Stuns Enemy & Deflects Thrown Knives
+    runCase('Perfect Parry stuns attacker & deflects thrown knives back', function () {
+        var sim = createSimState({ seed: 202, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        sim.player.x = 220;
+        sim.player.facing = 1;
+        var thrower = spawnEnemy(sim, 'knife', 340, -1);
+        thrower.cooldown = 999;
+
+        // Place an enemy knife right in front of the player moving left
+        sim.projectiles.push({
+            id: allocEntityId(sim),
+            x: 242, y: GROUND_Y - 46,
+            vx: -7.0, vy: 0,
+            owner: 'enemy', damage: 12, spin: 0, life: 80
+        });
+
+        // Press BLOCK right as knife hits -> Perfect Parry!
+        stepSimulation(sim, INPUT_BLOCK);
+        kfAssert(sim.parriesLanded === 1, 'Expected 1 perfect parry, got ' + sim.parriesLanded);
+        kfAssert(sim.player.parryCounterTimer > 0, 'Expected parryCounterTimer > 0');
+        kfAssert(sim.projectiles.length === 1 && sim.projectiles[0].owner === 'player' && sim.projectiles[0].vx > 0,
+            'Expected parried knife deflected back right as player projectile');
+
+        // Let deflected knife fly back and strike the thrower
+        for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
+        kfAssert(thrower.hp < thrower.maxHp || sim.enemies.length === 0, 'Deflected knife did not damage enemy');
+        return 'parries=' + sim.parriesLanded + ' deflected knife hit enemy';
+    });
+
+    // 4. Replay Ring Buffer Wraparound, Blending, & Play-From-Here Restore
+    runCase('Replay ring buffer wraparound & Play-From-Here restore', function () {
+        var setup = { seed: 424242, viewWidth: 800, viewHeight: 450, tickRate: 60 };
+        var ring = createReplayBuffer(50);
+        var sim = createSimState(setup);
+        var inputs = [];
+        var hashes = [];
+
+        pushReplayFrame(ring, sim);
+        hashes.push(hashSimState(sim));
+
+        for (var i = 0; i < 120; i++) {
+            var m = (i % 11 === 0) ? INPUT_ATTACK : ((i % 23 === 0) ? (INPUT_RIGHT | INPUT_JUMP) : INPUT_RIGHT);
+            inputs.push(m);
+            stepSimulation(sim, m);
+            pushReplayFrame(ring, sim);
+            hashes.push(hashSimState(sim));
+        }
+
+        kfAssert(getReplayLength(ring) === 50, 'Ring buffer should cap at 50');
+        kfAssert(getReplayEntry(ring, 0).tick === 71, 'Oldest tick expected 71');
+        kfAssert(getReplayEntry(ring, 49).tick === 120, 'Newest tick expected 120');
+
+        // Sub-frame blend sanity check
+        var midBlend = sampleBlendedReplayFrame(ring, 24.5);
+        kfAssert(midBlend && Number.isFinite(midBlend.player.x) && Number.isFinite(midBlend.cameraX), 'Invalid blended frame');
+
+        // Play From Here restore
+        var snap = getReplayEntry(ring, 20);
+        var resumed = cloneSimState(snap.simSnapshot);
+        kfAssert(resumed.tick === 91, 'Restored snapshot tick expected 91');
+        truncateReplayAfter(ring, 20);
+        kfAssert(getReplayLength(ring) === 21, 'Truncated length expected 21');
+
+        for (var t = 91; t < 120; t++) {
+            stepSimulation(resumed, inputs[t]);
+        }
+        kfAssert(hashSimState(resumed) === hashes[120], 'Restored sim diverged from original timeline');
+        return 'tick 91 -> 120 restored hash=' + formatHexHash(hashes[120]);
+    });
+
+    // 5. Dev Determinism Logger Divergence Pinpointing
+    runCase('Dev determinism logger pinpoints first divergent tick', function () {
+        var setup = { seed: 0x22334455, viewWidth: 800, viewHeight: 450, tickRate: 60 };
+        var sim = createSimState(setup);
+        var rec = createInputRecording(setup);
+        var ai = createAiState();
+        var logger = {
+            enabled: true, entries: [], hashes: [],
+            expectedCheckpoints: null, firstMismatch: null, lastHash: 0
+        };
+        logDeterminismTick(logger, sim, INPUT_NONE);
+
+        for (var t = 0; t < 140 && !sim.isGameOver; t++) {
+            var mask = computeAiInput(ai, sim);
+            rec.frames.push(mask);
+            stepSimulation(sim, mask);
+            logDeterminismTick(logger, sim, mask);
+        }
+
+        var checkpoints = exportDevCheckpoints(logger, rec.frames.length);
+        var json = serializeInputRecording(rec, checkpoints);
+        var clean = deserializeInputRecording(json);
+        kfAssert(runFastDeterminismVerify(clean).ok, 'Baseline 140-tick checkpoint verify failed');
+
+        var tampered = deserializeInputRecording(json);
+        tampered.devCheckpoints.hashes[60] = (tampered.devCheckpoints.hashes[60] ^ 1) >>> 0;
+        var res = runFastDeterminismVerify(tampered);
+        kfAssert(!res.ok && res.mismatch && res.mismatch.tick === 60, 'Expected divergence pinpointed at tick 60');
+        return 'clean PASS + pinpointed tampered tick 60';
+    });
+
+    // 6. Full AI Integration Test (Seed 1 & Seed 2)
+    runCase('AI Integration Test (Seed 0x51A7BEEF, 2400 ticks)', function () {
+        var res = runAiIntegrationTest({ seed: 0x51A7BEEF, ticks: 2400 });
+        kfAssert(res.ok, 'AI Integration Test failed: ' + JSON.stringify(res.checks));
+        if (KF_GOLDEN_AI_SEED_1_HASH !== null) {
+            kfAssert(res.finalHash === KF_GOLDEN_AI_SEED_1_HASH,
+                'Cross-engine drift! Expected ' + KF_GOLDEN_AI_SEED_1_HASH + ', got ' + res.finalHash);
+        }
+        fingerprintParts.push('kf_ai1=' + res.finalHash);
+        return 'score=' + res.score + ' floor=' + res.floor + ' hash=' + res.finalHash;
+    });
+
+    runCase('AI Integration Test (Seed 0xD3000001, 2400 ticks)', function () {
+        var res = runAiIntegrationTest({ seed: 0xD3000001, ticks: 2400 });
+        kfAssert(res.ok, 'AI Integration Test failed: ' + JSON.stringify(res.checks));
+        if (KF_GOLDEN_AI_SEED_2_HASH !== null) {
+            kfAssert(res.finalHash === KF_GOLDEN_AI_SEED_2_HASH,
+                'Cross-engine drift! Expected ' + KF_GOLDEN_AI_SEED_2_HASH + ', got ' + res.finalHash);
+        }
+        fingerprintParts.push('kf_ai2=' + res.finalHash);
+        return 'score=' + res.score + ' floor=' + res.floor + ' hash=' + res.finalHash;
+    });
+
+    // 7. Multi-Seed Self-Play Bug Hunt (5 seeds x 1200 ticks: invariants + saved input determinism)
+    runCase('Multi-seed Self-Play bug-hunt integration test (5 seeds)', function () {
+        var hunt = runSelfPlayBugHunt([0x1001, 0x2002, 0x3003, 0x4004, 0x5005], 1200);
+        kfAssert(hunt.ok, 'Bug detected on seed ' + hunt.failedSeed + ': ' + JSON.stringify(hunt.checks));
+        return hunt.seedsRun + ' seeds x ' + hunt.ticksPerSeed + ' ticks clean (KOs=' +
+            hunt.totalKOs + ', parries=' + hunt.totalParries + ', maxFloor=' + hunt.maxFloor + ')';
+    });
+
+    // 8. Cross-Device Responsive Viewport Math (Desktop / iOS Portrait / Android Landscape / 3x Retina)
+    runCase('Cross-device portrait & landscape viewport scaling', function () {
+        if (typeof computeViewportTransform !== 'function') {
+            return 'skipped (render.js not loaded)';
+        }
+        var screens = [
+            { name: 'Desktop 16:9',      cw: 1120, ch: 630,  reserve: 0 },
+            { name: 'iPhone Portrait',   cw: 390,  ch: 844,  reserve: 148 },
+            { name: 'Android Landscape', cw: 915,  ch: 412,  reserve: 0 },
+            { name: 'iPhone 3x Portrait',cw: 1170, ch: 2532, reserve: 444 }
+        ];
+        for (var i = 0; i < screens.length; i++) {
+            var s = screens[i];
+            var vp = computeViewportTransform(s.cw, s.ch, WORLD_VIEW_W, WORLD_VIEW_H, s.reserve);
+            kfAssert(vp.scale > 0 && Number.isFinite(vp.scale), s.name + ' invalid scale');
+            kfAssert(vp.drawW <= s.cw + 1e-6 && vp.drawH <= (s.ch - s.reserve) + 1e-6, s.name + ' overflows usable bounds');
+            kfAssertNear(vp.drawW / vp.drawH, WORLD_VIEW_W / WORLD_VIEW_H, 1e-6, s.name + ' aspect ratio');
+        }
+        return screens.length + ' portrait/landscape viewports verified';
+    });
+
+    var passedCount = 0;
+    for (var r = 0; r < results.length; r++) {
+        if (results[r].passed) passedCount++;
+    }
+
+    return {
+        ok: passedCount === results.length,
+        passed: passedCount,
+        total: results.length,
+        results: results,
+        fingerprint: fingerprintParts.join(' | ')
+    };
+}

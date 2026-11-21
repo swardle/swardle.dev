@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Vector Fury - Cross-Platform Test Runner</title>
+    <title>Shadow Pagoda — Cross-Platform Test Runner</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -11,22 +11,22 @@
             padding: 16px;
             padding-top: max(16px, env(safe-area-inset-top, 16px));
             padding-bottom: max(24px, env(safe-area-inset-bottom, 24px));
-            background: #06090c;
-            color: #d8f8ff;
+            background: #0d0707;
+            color: #f4e6cc;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 14px;
             line-height: 1.5;
         }
         .wrap { max-width: 900px; margin: 0 auto; }
-        h1 { margin: 0 0 8px 0; color: #0ff; font-size: 1.35rem; }
+        h1 { margin: 0 0 8px 0; color: #ffd24c; font-size: 1.35rem; }
         .meta {
-            background: #0c141a;
-            border: 1px solid #1e3b46;
+            background: #170c0c;
+            border: 1px solid #4a2220;
             padding: 10px 12px;
             margin-bottom: 12px;
             word-break: break-word;
             font-size: 12px;
-            color: #9dc;
+            color: #d8c4ae;
         }
         .toolbar {
             display: flex;
@@ -36,53 +36,49 @@
             align-items: center;
         }
         button {
-            background: #000;
-            color: #0ff;
-            border: 2px solid #0ff;
+            background: #1a0909;
+            color: #ffe7b3;
+            border: 2px solid #d92828;
             padding: 8px 14px;
             font-family: inherit;
             font-weight: bold;
             cursor: pointer;
         }
-        button:hover { background: #0ff; color: #000; }
+        button:hover { background: #d92828; color: #fff; }
         a.back-link {
-            color: #ff0;
+            color: #ffd24c;
             text-decoration: none;
-            border: 1px solid #ff0;
+            border: 1px solid #ffd24c;
             padding: 8px 12px;
         }
         .fingerprint {
-            background: #081812;
-            border: 2px solid #0f0;
-            color: #7f7;
+            background: #0e180e;
+            border: 2px solid #5fd66f;
+            color: #8df09b;
             padding: 10px 12px;
             margin-bottom: 14px;
             word-break: break-all;
         }
         .fingerprint.fail {
-            background: #1a0808;
-            border-color: #f44;
+            background: #1c0808;
+            border-color: #f55;
             color: #f88;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #090e12;
-        }
+        table { width: 100%; border-collapse: collapse; background: #120909; }
         th, td {
-            border: 1px solid #1f333d;
+            border: 1px solid #3a1f1c;
             padding: 8px 10px;
             text-align: left;
             vertical-align: top;
         }
-        th { background: #10202a; color: #0ff; }
-        .pass { color: #0f0; font-weight: bold; }
-        .fail { color: #f55; font-weight: bold; }
-        .detail { color: #bcd; font-size: 12px; word-break: break-word; }
+        th { background: #201010; color: #ffd24c; }
+        .pass { color: #7ff08f; font-weight: bold; }
+        .fail { color: #ff6666; font-weight: bold; }
+        .detail { color: #d6c8b6; font-size: 12px; word-break: break-word; }
         #sandbox-frame {
             width: 390px;
             height: 700px;
-            border: 1px solid #234;
+            border: 1px solid #332;
             position: fixed;
             left: -9999px;
             top: 0;
@@ -92,12 +88,13 @@
 </head>
 <body>
     <div class="wrap">
-        <h1>VECTOR FURY — ZERO-DEPENDENCY TEST RUNNER</h1>
+        <h1>SHADOW PAGODA — ZERO-DEPENDENCY TEST RUNNER</h1>
         <div class="meta" id="env-info">Detecting device...</div>
 
         <div class="toolbar">
             <button id="run-btn">Re-Run All Tests</button>
             <a class="back-link" href="index.html?dev=1">Open Game (?dev=1)</a>
+            <a class="back-link" href="../">Arcade Menu</a>
             <span id="summary-text">Running...</span>
         </div>
 
@@ -118,18 +115,17 @@
         </table>
     </div>
 
-    <!-- Offscreen mobile-sized iframe to run real DOM / CSS / Replay / Input checks -->
-    <iframe id="sandbox-frame" title="Game DOM Test Sandbox"></iframe>
+    <iframe id="sandbox-frame" title="Shadow Pagoda DOM Test Sandbox"></iframe>
 
-    <script src="js/math.js"></script>
-    <script src="js/rng.js"></script>
+    <script src="../shared/math.js"></script>
+    <script src="../shared/rng.js"></script>
     <script src="js/input.js"></script>
     <script src="js/sim.js"></script>
     <script src="js/ai.js"></script>
     <script src="js/replay.js"></script>
     <script src="js/debug.js"></script>
     <script src="js/render.js"></script>
-    <script src="tests/suite.js"></script>
+    <script src="../tests/kung_fu_suite.js"></script>
 
     <script>
         (function () {
@@ -147,6 +143,13 @@
                 ' | Touch: ' + (touchCapable ? 'yes' : 'no') +
                 ' | UA: ' + navigator.userAgent;
 
+            function escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
             function addRow(r) {
                 var tr = document.createElement('tr');
                 tr.innerHTML =
@@ -157,14 +160,6 @@
                 resultsBody.appendChild(tr);
             }
 
-            function escapeHtml(str) {
-                return String(str)
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-            }
-
-            // Browser-only live DOM & layout smoke test inside an iPhone-sized iframe
             function runBrowserDomTests(done) {
                 var domResults = [];
                 var t0 = performance.now();
@@ -178,52 +173,40 @@
                         pageErrors.push(e.message || 'Uncaught error');
                     });
 
-                    // Give attract demo a few frames to render
                     setTimeout(function () {
-                        // Check 1: Game loads cleanly with zero errors & canvas has HiDPI backing size
                         try {
                             var canvas = doc.getElementById('gameCanvas');
-                            vfAssert(pageErrors.length === 0, 'Uncaught errors: ' + pageErrors.join('; '));
-                            vfAssert(canvas && canvas.width > 0 && canvas.height > 0, 'Canvas backing dimensions invalid');
+                            kfAssert(pageErrors.length === 0, 'Uncaught errors: ' + pageErrors.join('; '));
+                            kfAssert(canvas && canvas.width > 0 && canvas.height > 0, 'Canvas backing dimensions invalid');
                             var devBtn = doc.getElementById('hud-menu-btn');
-                            vfAssert(devBtn && devBtn.textContent.indexOf('DEV') !== -1, 'Expected MENU [DEV] in ?dev=1 mode');
+                            kfAssert(devBtn && devBtn.textContent.indexOf('DEV') !== -1, 'Expected MENU [DEV] in ?dev=1 mode');
                             domResults.push({
-                                name: '[Browser] Game loads cleanly & HiDPI canvas ready',
+                                name: '[Browser] Shadow Pagoda loads cleanly & HiDPI canvas ready',
                                 passed: true,
                                 detail: 'canvas=' + canvas.width + 'x' + canvas.height + ' (CSS ' + canvas.clientWidth + 'x' + canvas.clientHeight + ')',
                                 ms: Math.round((performance.now() - t0) * 100) / 100
                             });
                         } catch (err) {
                             domResults.push({
-                                name: '[Browser] Game loads cleanly & HiDPI canvas ready',
+                                name: '[Browser] Shadow Pagoda loads cleanly & HiDPI canvas ready',
                                 passed: false,
                                 detail: err.message,
                                 ms: Math.round((performance.now() - t0) * 100) / 100
                             });
                         }
 
-                        // Check 2: Mobile controls hide when Replay mode opens (no overlap with #replay-bar)
                         var t1 = performance.now();
                         try {
                             doc.body.classList.add('mobile-controls-visible');
+                            doc.getElementById('demo-button').click();
                             doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true }));
                             var replayBar = doc.getElementById('replay-bar');
                             var mobileControls = doc.getElementById('mobile-controls');
                             var replayVisible = win.getComputedStyle(replayBar).display !== 'none';
                             var mobileHidden  = win.getComputedStyle(mobileControls).display === 'none';
-                            // Exit replay
-                            doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true }));
 
-                            // Note: on title screen, R only opens replay after starting demo/game; click Watch AI Demo if needed
-                            if (!replayVisible) {
-                                doc.getElementById('demo-button').click();
-                                doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'r', code: 'KeyR', bubbles: true }));
-                                replayVisible = win.getComputedStyle(replayBar).display !== 'none';
-                                mobileHidden  = win.getComputedStyle(mobileControls).display === 'none';
-                            }
-
-                            vfAssert(replayVisible, 'Replay bar failed to open on R key');
-                            vfAssert(mobileHidden, 'Mobile controls overlapped Replay bar instead of hiding');
+                            kfAssert(replayVisible, 'Replay bar failed to open on R key');
+                            kfAssert(mobileHidden, 'Mobile controls overlapped Replay bar instead of hiding');
                             domResults.push({
                                 name: '[Browser] Mobile controls hide cleanly during Replay',
                                 passed: true,
@@ -253,7 +236,7 @@
                 fpBox.textContent = 'Cross-Engine Determinism Fingerprint: computing...';
 
                 setTimeout(function () {
-                    var shared = runSharedTestSuite();
+                    var shared = runKungFuTestSuite();
                     for (var i = 0; i < shared.results.length; i++) {
                         addRow(shared.results[i]);
                     }

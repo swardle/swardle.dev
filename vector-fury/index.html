@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Vector Fury</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            height: 100dvh;
+            background-color: #000;
+            color: #0ff;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 90vw;
+            height: 80vh;
+            height: 80dvh;
+            max-width: 1000px;
+            max-height: 800px;
+            border: 3px solid #0ff;
+            box-shadow: 0 0 20px #0ff, inset 0 0 20px #0ff;
+            background-color: #020202;
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            #game-container {
+                width: 96vw;
+                height: 92vh;
+                height: 92dvh;
+            }
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+        }
+
+        /* Scanlines effect */
+        #game-container::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 98%, rgba(255,255,255,0.16) 99%, rgba(0,0,0,0) 100%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            animation: scanlines 1s steps(60) infinite;
+            z-index: 15;
+        }
+
+        @keyframes scanlines {
+            from { background-position: 0 0; }
+            to { background-position: 0 240px; }
+        }
+
+        /* Top-right HUD utility controls */
+        #top-hud {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 40;
+        }
+
+        .hud-btn {
+            padding: 6px 10px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.65rem;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #0ff;
+            border: 1px solid #0ff;
+            cursor: pointer;
+            box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+        }
+
+        .hud-btn:hover {
+            background-color: #0ff;
+            color: #000;
+        }
+
+        #hud-replay-btn {
+            color: #f0f;
+            border-color: #f0f;
+            box-shadow: 0 0 6px rgba(255, 0, 255, 0.4);
+        }
+
+        #hud-replay-btn:hover {
+            background-color: #f0f;
+            color: #000;
+        }
+
+        /* Center Message Overlay (Title / Pause / Game Over) */
+        #message-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff0;
+            font-size: 2rem;
+            text-align: center;
+            text-shadow: 0 0 10px #ff0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 25;
+            background: rgba(0, 0, 0, 0.72);
+            padding: 24px 32px;
+            border: 2px solid rgba(255, 255, 0, 0.4);
+            max-width: 90%;
+        }
+
+        #message-overlay h1 {
+            margin: 0 0 16px 0;
+            font-size: 2rem;
+        }
+
+        #message-overlay p {
+            margin: 0 0 10px 0;
+            font-size: 0.85rem;
+            line-height: 1.7;
+        }
+
+        .overlay-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        #message-overlay button {
+            padding: 10px 18px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.9rem;
+            background-color: #000;
+            color: #ff0;
+            border: 2px solid #ff0;
+            cursor: pointer;
+            box-shadow: 0 0 10px #ff0;
+            transition: all 0.15s ease;
+        }
+
+        #message-overlay button:hover {
+            background-color: #ff0;
+            color: #000;
+        }
+
+        #gameover-replay-btn {
+            color: #f0f !important;
+            border-color: #f0f !important;
+            box-shadow: 0 0 10px #f0f !important;
+        }
+
+        #gameover-replay-btn:hover {
+            background-color: #f0f !important;
+            color: #000 !important;
+        }
+
+        /* Non-Gameplay Menu Modal (Saved Input & Dev Determinism) */
+        #menu-modal {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.88);
+            z-index: 60;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .menu-panel {
+            width: 100%;
+            max-width: 560px;
+            max-height: 92%;
+            overflow-y: auto;
+            background: #04080a;
+            border: 2px solid #0ff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            padding: 18px;
+            color: #0ff;
+            font-size: 0.7rem;
+            line-height: 1.6;
+        }
+
+        .menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.4);
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }
+
+        .menu-header h2 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #ff0;
+        }
+
+        .menu-section {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.25);
+        }
+
+        .menu-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .menu-section h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.78rem;
+            color: #0ff;
+        }
+
+        .menu-status {
+            color: #ccc;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin: 0 0 10px 0;
+        }
+
+        .menu-btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .menu-btn {
+            padding: 8px 12px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.62rem;
+            background: #000;
+            color: #0ff;
+            border: 1px solid #0ff;
+            cursor: pointer;
+        }
+
+        .menu-btn:hover:not(:disabled) {
+            background: #0ff;
+            color: #000;
+        }
+
+        .menu-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .menu-btn.warn {
+            color: #ff0;
+            border-color: #ff0;
+        }
+
+        .menu-btn.warn:hover:not(:disabled) {
+            background: #ff0;
+            color: #000;
+        }
+
+        #menu-feedback {
+            font-family: monospace;
+            font-size: 0.82rem;
+            color: #ff0;
+            min-height: 1.2em;
+        }
+
+        .dev-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #aef;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .dev-report {
+            background: #000;
+            border: 1px solid #444;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            color: #ccc;
+            min-height: 44px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        .dev-report.ok {
+            border-color: #0f0;
+            color: #0f0;
+        }
+
+        .dev-report.error {
+            border-color: #f44;
+            color: #f66;
+        }
+
+        /* In-Game Replay Control Bar */
+        #replay-bar {
+            display: none;
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            background: rgba(6, 0, 12, 0.92);
+            border: 2px solid #f0f;
+            box-shadow: 0 0 14px rgba(255, 0, 255, 0.5);
+            padding: 10px 12px;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 50;
+        }
+
+        .replay-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.62rem;
+            color: #f0f;
+        }
+
+        #replay-scrubber {
+            width: 100%;
+            accent-color: #f0f;
+            cursor: pointer;
+        }
+
+        .replay-controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .replay-btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .replay-btn {
+            padding: 5px 8px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.55rem;
+            background: #000;
+            color: #f0f;
+            border: 1px solid #f0f;
+            cursor: pointer;
+        }
+
+        .replay-btn:hover,
+        .replay-btn.active {
+            background: #f0f;
+            color: #000;
+        }
+
+        #replay-play-here-btn {
+            color: #0f0;
+            border-color: #0f0;
+        }
+
+        #replay-play-here-btn:hover {
+            background: #0f0;
+            color: #000;
+        }
+
+        #replay-exit-btn {
+            color: #0ff;
+            border-color: #0ff;
+        }
+
+        #replay-exit-btn:hover {
+            background: #0ff;
+            color: #000;
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            height: 100px;
+            z-index: 30;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mobile-controls-visible #mobile-controls {
+            display: flex;
+        }
+
+        .replay-mode-active #mobile-controls,
+        .menu-modal-open #mobile-controls {
+            display: none !important;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            background-color: rgba(0, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none;
+        }
+
+        .control-btn.active {
+            background-color: rgba(0, 255, 255, 0.35);
+        }
+
+        #d-pad {
+            display: flex;
+            gap: 15px;
+        }
+
+        #btn-shoot {
+            width: 80px;
+            height: 80px;
+        }
+
+        .control-btn svg {
+            width: 50%;
+            height: 50%;
+            fill: rgba(0, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Top-right HUD controls -->
+        <div id="top-hud">
+            <a class="hud-btn" id="hud-home-btn" href="../" style="text-decoration:none;display:inline-flex;align-items:center;" title="Back to Game Select">GAMES</a>
+            <button class="hud-btn" id="hud-replay-btn" style="display:none;" title="In-Game Replay (R)">REPLAY [R]</button>
+            <button class="hud-btn" id="hud-menu-btn" title="Saved Input &amp; Menu (Esc)">MENU</button>
+        </div>
+
+        <!-- Title / Pause / Game Over Overlay -->
+        <div id="message-overlay">
+            <h1 id="message-title">VECTOR FURY</h1>
+            <p id="message-text">Arrow Keys / WASD to Move &bull; Space to Shoot<br>P to Pause &bull; R for Replay &bull; Esc for Menu</p>
+            <div class="overlay-actions">
+                <button id="start-button">Start Game</button>
+                <button id="demo-button">Watch AI Demo</button>
+                <button id="gameover-replay-btn" style="display:none;">Watch Replay</button>
+                <button id="gameover-save-btn" style="display:none;">Save Input</button>
+            </div>
+        </div>
+
+        <!-- Non-Gameplay Menu (Saved Input + Dev Determinism Tools) -->
+        <div id="menu-modal">
+            <div class="menu-panel">
+                <div class="menu-header">
+                    <h2>GAME MENU</h2>
+                    <button class="menu-btn" id="menu-close-btn">CLOSE [ESC]</button>
+                </div>
+
+                <div class="menu-section">
+                    <h3>SAVED INPUT (DETERMINISTIC PLAYBACK)</h3>
+                    <p class="menu-status" id="input-status-text">Ready</p>
+                    <div class="menu-btn-row">
+                        <button class="menu-btn" id="save-input-btn">Save Input File</button>
+                        <button class="menu-btn" id="load-input-btn">Load &amp; Play Input</button>
+                        <button class="menu-btn" id="menu-demo-btn">Start AI Demo</button>
+                        <button class="menu-btn warn" id="stop-playback-btn" style="display:none;">Stop Playback</button>
+                        <a class="menu-btn" href="../" style="text-decoration:none;display:inline-flex;align-items:center;">Switch Game</a>
+                        <input type="file" id="load-input-file" accept=".json,application/json,text/plain" style="display:none;">
+                    </div>
+                    <div id="menu-feedback"></div>
+                </div>
+
+                <div class="menu-section" id="dev-section" style="display:none;">
+                    <h3>DEV DETERMINISM LOGGER (?dev=1)</h3>
+                    <p class="menu-status" id="dev-live-hash">No active simulation</p>
+                    <label class="dev-checkbox">
+                        <input type="checkbox" id="dev-include-hashes" checked>
+                        Include per-tick state hashes in saved input file
+                    </label>
+                    <div class="menu-btn-row">
+                        <button class="menu-btn warn" id="dev-fast-verify-btn">Fast Verify Determinism</button>
+                        <button class="menu-btn warn" id="dev-ai-test-btn">Run AI Integration Test</button>
+                        <button class="menu-btn" id="dev-download-log-btn">Download Debug Log</button>
+                    </div>
+                    <div class="dev-report" id="dev-report-box">Ready. Save or load an input file to verify tick-by-tick determinism.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- In-Game Replay Controls -->
+        <div id="replay-bar">
+            <div class="replay-top-row">
+                <span>IN-GAME REPLAY (Enter = Play Here, Space = Play/Pause, Arrows = Step)</span>
+                <span id="replay-info-text">TICK 0.00</span>
+            </div>
+            <input type="range" id="replay-scrubber" min="0" max="0" step="0.05" value="0">
+            <div class="replay-controls-row">
+                <div class="replay-btn-group">
+                    <button class="replay-btn replay-speed-btn" data-speed="-2">-2x</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="-1">-1x</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="-0.25">-0.25x</button>
+                    <button class="replay-btn replay-speed-btn active" data-speed="0">PAUSE</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="0.25">0.25x</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="0.5">0.5x</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="1">1x</button>
+                    <button class="replay-btn replay-speed-btn" data-speed="2">2x</button>
+                </div>
+                <div class="replay-btn-group">
+                    <button class="replay-btn" id="replay-step-back" title="Step back 1 frame">-1f</button>
+                    <button class="replay-btn" id="replay-step-sub-back" title="Step back 0.25 frame">-0.25f</button>
+                    <button class="replay-btn" id="replay-step-sub-fwd" title="Step forward 0.25 frame">+0.25f</button>
+                    <button class="replay-btn" id="replay-step-fwd" title="Step forward 1 frame">+1f</button>
+                </div>
+                <div class="replay-btn-group">
+                    <button class="replay-btn" id="replay-play-here-btn">PLAY FROM HERE</button>
+                    <button class="replay-btn" id="replay-exit-btn">EXIT [R]</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- On-screen controls for mobile -->
+        <div id="mobile-controls">
+            <div id="d-pad">
+                <div class="control-btn" id="btn-left">
+                    <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+                </div>
+                <div class="control-btn" id="btn-thrust">
+                    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/></svg>
+                </div>
+                <div class="control-btn" id="btn-right">
+                    <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+                </div>
+            </div>
+            <div class="control-btn" id="btn-shoot">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple vanilla JS modules in dependency order (no build step) -->
+    <script src="../shared/math.js"></script>
+    <script src="../shared/rng.js"></script>
+    <script src="js/input.js"></script>
+    <script src="js/sim.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/replay.js"></script>
+    <script src="js/debug.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
