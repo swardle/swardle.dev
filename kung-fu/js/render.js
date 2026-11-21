@@ -180,6 +180,13 @@ function renderGameFrame(ctx, canvasW, canvasH, frame, opts) {
         drawTrap(ctx, frame.traps[ti], frame.tick);
     }
 
+    // Active Fire Pillars & Burning Ground Craters (Dragon Fist Inferno!)
+    if (frame.flames && frame.flames.length > 0) {
+        for (var fli = 0; fli < frame.flames.length; fli++) {
+            drawFireZone(ctx, frame.flames[fli], frame.tick);
+        }
+    }
+
     // Enemies
     for (var ei = 0; ei < frame.enemies.length; ei++) {
         drawEnemyFighter(ctx, frame.enemies[ei], frame.tick);
@@ -710,16 +717,61 @@ function drawFighterSilhouette(ctx, opts) {
         ctx.fillStyle = '#d8e0e8';
         ctx.fillRect(headX + 1, headY - 4.5, 6, 3.5);
     } else if (fStyle === 'dragon') {
-        // Glowing golden dragon-wrapped fist gauntlets + golden martial belt sash!
-        ctx.fillStyle = '#ff9e1b';
-        ctx.strokeStyle = '#ffd24c';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(fHandX, fHandY, 5.4, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(bHandX, bHandY, 4.8, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
+        // Always-on Live Flickering Flame Gauntlets on BOTH fists + Golden Martial Belt!
+        var flT = phase * 3.8;
+        var hands = [{ hx: fHandX, hy: fHandY, r: 6.2 }, { hx: bHandX, hy: bHandY, r: 5.2 }];
+        var flameScale = (opts.streakTier >= 2) ? 1.55 : ((opts.streakTier >= 1) ? 1.25 : 0.95);
+        for (var hi = 0; hi < hands.length; hi++) {
+            var hd = hands[hi];
+            var flick = Math.sin(flT + hi * 2.1) * 3.2;
+            ctx.save();
+            ctx.shadowColor = '#ff5a14';
+            ctx.shadowBlur = 10 * flameScale;
+            // Outer roaring orange-red flame tongue
+            ctx.fillStyle = '#ff4a14';
+            ctx.beginPath();
+            ctx.moveTo(hd.hx - hd.r, hd.hy + 2);
+            ctx.quadraticCurveTo(hd.hx - hd.r * 1.1, hd.hy - 12 * flameScale, hd.hx + flick * 0.6, hd.hy - (18 + flick) * flameScale);
+            ctx.quadraticCurveTo(hd.hx + hd.r * 1.1, hd.hy - 10 * flameScale, hd.hx + hd.r, hd.hy + 2);
+            ctx.arc(hd.hx, hd.hy, hd.r, 0, Math.PI);
+            ctx.closePath();
+            ctx.fill();
+            // Inner gold-white hot core flame
+            ctx.fillStyle = '#ffd24c';
+            ctx.beginPath();
+            ctx.moveTo(hd.hx - hd.r * 0.65, hd.hy + 1);
+            ctx.quadraticCurveTo(hd.hx, hd.hy - 12 * flameScale, hd.hx - flick * 0.4, hd.hy - (12 + flick * 0.5) * flameScale);
+            ctx.quadraticCurveTo(hd.hx + hd.r * 0.7, hd.hy - 6 * flameScale, hd.hx + hd.r * 0.65, hd.hy + 1);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#fff8dc';
+            ctx.beginPath();
+            ctx.arc(hd.hx, hd.hy - 1, hd.r * 0.45, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Coiling Fire-Dragon Spirit spiraling upward on Dragon Uppercut!
+        if (pose === 'dragon_upper') {
+            ctx.save();
+            ctx.shadowColor = '#ff6a1a';
+            ctx.shadowBlur = 14;
+            ctx.strokeStyle = '#ff5a14';
+            ctx.lineWidth = 7;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            for (var ds = 0; ds <= 14; ds++) {
+                var dy = -ds * 8.5;
+                var dx = Math.sin(ds * 0.75 + phase * 3.0) * 20;
+                if (ds === 0) ctx.moveTo(dx, dy);
+                else ctx.lineTo(dx, dy);
+            }
+            ctx.stroke();
+            ctx.strokeStyle = '#ffe580';
+            ctx.lineWidth = 2.8;
+            ctx.stroke();
+            ctx.restore();
+        }
 
         ctx.strokeStyle = '#ff9e1b';
         ctx.lineWidth = 3.8;
@@ -744,11 +796,41 @@ function drawFighterSilhouette(ctx, opts) {
         ctx.closePath();
         ctx.fill();
         ctx.strokeStyle = '#38d9ff';
-        ctx.lineWidth = 2.4;
+        ctx.lineWidth = 2.6;
         ctx.beginPath();
         ctx.moveTo(headX - 27, headY - 3);
         ctx.lineTo(headX + 27, headY - 3);
         ctx.stroke();
+
+        // Always-on crackling electric arcs jumping around Kasa hat, hands & body!
+        ctx.save();
+        ctx.shadowColor = '#38d9ff';
+        ctx.shadowBlur = 9;
+        var arcCount = (opts.streakTier >= 2) ? 4 : ((opts.streakTier >= 1) ? 3 : 2);
+        for (var la = 0; la < arcCount; la++) {
+            var aSeed = Math.floor(phase * 5.0) + la * 13;
+            var x1 = (la % 2 === 0) ? (headX - 22 + (aSeed % 17)) : fHandX;
+            var y1 = (la % 2 === 0) ? (headY - 4) : fHandY;
+            var x2 = (la % 2 === 0) ? (headX + 6 + ((aSeed * 3) % 18)) : (shoulderX + ((aSeed % 12) - 6));
+            var y2 = (la % 2 === 0) ? (headY - 12 - (aSeed % 9)) : (shoulderY + (aSeed % 22));
+            var xm = (x1 + x2) * 0.5 + (((aSeed * 7) % 13) - 6);
+            var ym = (y1 + y2) * 0.5 + (((aSeed * 5) % 11) - 5);
+            ctx.strokeStyle = '#38d9ff';
+            ctx.lineWidth = 2.6;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1); ctx.lineTo(xm, ym); ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.1;
+            ctx.stroke();
+        }
+        // Electric sparks crackling on both fists
+        ctx.fillStyle = '#8ef4ff';
+        ctx.beginPath();
+        ctx.arc(fHandX, fHandY, 3.6 + Math.sin(phase * 6) * 1.2, 0, Math.PI * 2);
+        ctx.arc(bHandX, bHandY, 3.0 + Math.cos(phase * 6) * 1.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
 
         // Giant glowing storm prayer-bead necklace (juzu) across chest!
         ctx.fillStyle = '#8ef4ff';
@@ -759,37 +841,47 @@ function drawFighterSilhouette(ctx, opts) {
             var pbx = shoulderX - 8 + pt * 17;
             var pby = shoulderY + 4 + Math.sin(pt * Math.PI) * 11;
             ctx.beginPath();
-            ctx.arc(pbx, pby, 2.7, 0, Math.PI * 2);
+            ctx.arc(pbx, pby, 2.8, 0, Math.PI * 2);
             ctx.fill(); ctx.stroke();
         }
         // Electric robe hem trim
         ctx.strokeStyle = '#38d9ff';
-        ctx.lineWidth = 2.0;
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
         ctx.moveTo(hipX - 15, hipY + 16);
         ctx.lineTo(hipX + 14, hipY + 16);
         ctx.stroke();
     } else if (fStyle === 'lotus') {
-        // Dual glowing emerald jade twin-daggers held in BOTH hands + lotus hem!
-        ctx.strokeStyle = '#7dffba';
-        ctx.lineWidth = 2.8;
+        // Tide Lotus: Dual glowing aqua-water blades + flowing ocean ribbon scarf & spray!
+        ctx.save();
+        ctx.shadowColor = '#1ee6c8';
+        ctx.shadowBlur = 9;
+        ctx.strokeStyle = '#7df9ff';
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
         ctx.moveTo(fHandX, fHandY);
-        ctx.lineTo(fHandX + 18, fHandY - 5);
+        ctx.lineTo(fHandX + 19, fHandY - 5);
         ctx.moveTo(bHandX, bHandY);
-        ctx.lineTo(bHandX - 15, bHandY + 4);
+        ctx.lineTo(bHandX - 16, bHandY + 4);
         ctx.stroke();
-        // Flowing emerald neck scarf
-        var scWave = Math.sin(phase * 1.9) * 4;
-        ctx.strokeStyle = '#36e68a';
-        ctx.lineWidth = 3.0;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.restore();
+        // Flowing shimmering aqua water-ribbon scarf
+        var scWave = Math.sin(phase * 2.2) * 5;
+        ctx.strokeStyle = '#1ee6c8';
+        ctx.lineWidth = 3.8;
         ctx.beginPath();
         ctx.moveTo(shoulderX - 4, shoulderY + 1);
-        ctx.quadraticCurveTo(shoulderX - 18, shoulderY + 6 + scWave, shoulderX - 30, shoulderY + 14 - scWave * 0.5);
+        ctx.quadraticCurveTo(shoulderX - 20, shoulderY + 6 + scWave, shoulderX - 36, shoulderY + 16 - scWave * 0.6);
         ctx.stroke();
-        // Jade hakama trim
-        ctx.strokeStyle = '#36e68a';
-        ctx.lineWidth = 2.0;
+        ctx.strokeStyle = '#c8ffff';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+        // Aqua hakama trim
+        ctx.strokeStyle = '#1ee6c8';
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
         ctx.moveTo(hipX - 16, hipY + 16);
         ctx.lineTo(hipX + 15, hipY + 16);
@@ -1044,10 +1136,42 @@ function drawLightningBolt(ctx, bl, tick) {
     var alpha = Math.max(0, bl.life / (bl.maxLife || 12));
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = bl.color || '#8ef4ff';
-    ctx.lineWidth = 3.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    if (bl.isSky) {
+        // Massive vertical Sky Thunderbolt strike from the heavens!
+        ctx.shadowColor = '#38d9ff';
+        ctx.shadowBlur = 18;
+        ctx.strokeStyle = '#38d9ff';
+        ctx.lineWidth = 8.5;
+        ctx.beginPath();
+        ctx.moveTo(bl.x1, bl.y1);
+        var skySegs = 9;
+        for (var si = 1; si < skySegs; si++) {
+            var st = si / skySegs;
+            var sx = bl.x1 + Math.sin(tick * 3.1 + bl.id + si * 2.4) * 18;
+            var sy = bl.y1 + (bl.y2 - bl.y1) * st;
+            ctx.lineTo(sx, sy);
+        }
+        ctx.lineTo(bl.x2, bl.y2);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        // Bright ground impact flash
+        var sg = ctx.createRadialGradient(bl.x2, bl.y2, 2, bl.x2, bl.y2, 46);
+        sg.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
+        sg.addColorStop(0.5, 'rgba(56, 217, 255, 0.55)');
+        sg.addColorStop(1, 'rgba(56, 217, 255, 0)');
+        ctx.fillStyle = sg;
+        ctx.beginPath();
+        ctx.arc(bl.x2, bl.y2, 46, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+    ctx.strokeStyle = bl.color || '#8ef4ff';
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(bl.x1, bl.y1);
     var segs = 5;
@@ -1103,10 +1227,24 @@ function drawPlayerFighter(ctx, p, tick, streakTier) {
         streakAuraColor: fighter.accent
     });
 
-    // Lotus Blade Orbiting Jade Ink Blades (Tier 1: 2 blades, Tier 2: 3 blades)
+    // Tide Lotus Swirling Water-Ribbon Halo + Orbiting Aqua Water Blades!
     if (fighter.id === 'lotus' && tier >= 1 && p.alive) {
         var bCount = tier >= 2 ? 3 : 2;
         var baseAng = p.orbitAngle || 0;
+        // Continuous glowing swirling water-vortex ring linking the blades!
+        ctx.save();
+        ctx.strokeStyle = 'rgba(30, 230, 200, 0.52)';
+        ctx.lineWidth = tier >= 2 ? 5.0 : 3.6;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y - 44, 56, 34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(220, 255, 255, 0.72)';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y - 44, 56, 34, 0, baseAng, baseAng + Math.PI * 1.35);
+        ctx.stroke();
+        ctx.restore();
+
         for (var bi = 0; bi < bCount; bi++) {
             var a = baseAng + (bi * Math.PI * 2 / bCount);
             var bx = p.x + Math.cos(a) * 56;
@@ -1114,16 +1252,16 @@ function drawPlayerFighter(ctx, p, tick, streakTier) {
             ctx.save();
             ctx.translate(bx, by);
             ctx.rotate(tick * 0.35 + bi);
-            ctx.shadowColor = '#36e68a';
-            ctx.shadowBlur = 10;
-            ctx.fillStyle = '#7dffba';
-            ctx.strokeStyle = '#0d261a';
+            ctx.shadowColor = '#1ee6c8';
+            ctx.shadowBlur = 12;
+            ctx.fillStyle = '#7df9ff';
+            ctx.strokeStyle = '#083a3a';
             ctx.lineWidth = 1.6;
             ctx.beginPath();
             for (var sp = 0; sp < 3; sp++) {
                 var sa = sp * (Math.PI * 2 / 3);
-                ctx.lineTo(Math.cos(sa) * 12, Math.sin(sa) * 12);
-                ctx.lineTo(Math.cos(sa + 0.6) * 4, Math.sin(sa + 0.6) * 4);
+                ctx.lineTo(Math.cos(sa) * 13, Math.sin(sa) * 13);
+                ctx.lineTo(Math.cos(sa + 0.6) * 4.5, Math.sin(sa + 0.6) * 4.5);
             }
             ctx.closePath();
             ctx.fill();
@@ -1131,6 +1269,88 @@ function drawPlayerFighter(ctx, p, tick, streakTier) {
             ctx.restore();
         }
     }
+}
+
+function drawFireZone(ctx, fl, tick) {
+    var alpha = Math.max(0, Math.min(1, fl.life / Math.min(20, fl.maxLife || 20)));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (fl.kind === 'cyclone') {
+        // 4a Phantom Gale Razor Wind Cyclone Tornado!
+        var ch = fl.height || 118;
+        var cr = fl.radius || 28;
+        var rings = 6;
+        ctx.shadowColor = '#c66bff';
+        ctx.shadowBlur = 10;
+        for (var ri = 0; ri < rings; ri++) {
+            var frac = ri / (rings - 1);
+            var ry = fl.y - 8 - frac * (ch - 14);
+            var rx = cr * (0.42 + frac * 0.95);
+            var wob = Math.sin(tick * 0.65 + fl.id + ri * 1.4) * (5 + frac * 6);
+            ctx.strokeStyle = (ri % 2 === 0) ? 'rgba(226, 168, 255, 0.85)' : 'rgba(255, 255, 255, 0.78)';
+            ctx.lineWidth = 3.2 - frac * 1.1;
+            ctx.beginPath();
+            ctx.ellipse(fl.x + wob, ry, rx, 5.5 + frac * 3.5, 0, tick * 0.4 + ri, tick * 0.4 + ri + Math.PI * 1.45);
+            ctx.stroke();
+        }
+        ctx.restore();
+        return;
+    }
+
+    if (fl.kind === 'pillar') {
+        var grow = Math.min(1, (fl.maxLife - fl.life + 4) / 8);
+        var h = (fl.height || 150) * grow;
+        var r = fl.radius || 30;
+        var sway = Math.sin(tick * 0.7 + fl.id) * 6;
+
+        // Outer blazing fire column
+        var pg = ctx.createLinearGradient(fl.x, fl.y, fl.x, fl.y - h);
+        pg.addColorStop(0, 'rgba(255, 70, 15, 0.92)');
+        pg.addColorStop(0.55, 'rgba(255, 165, 30, 0.85)');
+        pg.addColorStop(1, 'rgba(255, 240, 140, 0)');
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        ctx.moveTo(fl.x - r, fl.y);
+        ctx.quadraticCurveTo(fl.x - r * 0.85 + sway, fl.y - h * 0.55, fl.x + sway * 1.4, fl.y - h);
+        ctx.quadraticCurveTo(fl.x + r * 0.85 + sway, fl.y - h * 0.55, fl.x + r, fl.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // White-hot inner flame core
+        ctx.fillStyle = 'rgba(255, 245, 200, 0.85)';
+        ctx.beginPath();
+        ctx.moveTo(fl.x - r * 0.45, fl.y);
+        ctx.quadraticCurveTo(fl.x - r * 0.3 - sway * 0.5, fl.y - h * 0.45, fl.x + sway * 0.6, fl.y - h * 0.78);
+        ctx.quadraticCurveTo(fl.x + r * 0.3 - sway * 0.5, fl.y - h * 0.45, fl.x + r * 0.45, fl.y);
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        // Scorching ground fire patch with dancing flame tongues!
+        var gr = fl.radius || 64;
+        var gg = ctx.createRadialGradient(fl.x, fl.y, 4, fl.x, fl.y, gr);
+        gg.addColorStop(0, 'rgba(255, 210, 76, 0.85)');
+        gg.addColorStop(0.5, 'rgba(255, 88, 20, 0.68)');
+        gg.addColorStop(1, 'rgba(255, 50, 10, 0)');
+        ctx.fillStyle = gg;
+        ctx.beginPath();
+        ctx.ellipse(fl.x, fl.y - 2, gr, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        var tongues = 5;
+        for (var ti = 0; ti < tongues; ti++) {
+            var frac = (ti / (tongues - 1)) * 2 - 1;
+            var tx = fl.x + frac * gr * 0.72;
+            var th = (18 + Math.sin(tick * 0.55 + fl.id + ti * 1.9) * 9) * (1 - Math.abs(frac) * 0.35);
+            ctx.fillStyle = (ti % 2 === 0) ? '#ff5a14' : '#ffb830';
+            ctx.beginPath();
+            ctx.moveTo(tx - 10, fl.y);
+            ctx.quadraticCurveTo(tx - 4, fl.y - th * 0.6, tx + Math.sin(tick * 0.4 + ti) * 4, fl.y - th);
+            ctx.quadraticCurveTo(tx + 4, fl.y - th * 0.6, tx + 10, fl.y);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+    ctx.restore();
 }
 
 function drawEnemyFighter(ctx, e, tick) {
@@ -1166,6 +1386,24 @@ function drawEnemyFighter(ctx, e, tick) {
         weapon: weapon,
         windupGlint: windupGlint
     });
+
+    // Visible flickering flames on burning enemies (Dragon Fist Ignite!)
+    if ((e.burnTimer || 0) > 0) {
+        ctx.save();
+        for (var bf = 0; bf < 3; bf++) {
+            var bfx = e.x + (bf - 1) * 11 * e.scale;
+            var bfy = e.y - (32 + bf * 10) * e.scale;
+            var bfh = 15 + Math.sin(tick * 0.6 + e.id + bf * 2.1) * 6;
+            ctx.fillStyle = (bf === 1) ? '#ffd24c' : '#ff5214';
+            ctx.beginPath();
+            ctx.moveTo(bfx - 6, bfy + 4);
+            ctx.quadraticCurveTo(bfx - 2, bfy - bfh * 0.5, bfx + Math.sin(tick * 0.5 + bf) * 3, bfy - bfh);
+            ctx.quadraticCurveTo(bfx + 2, bfy - bfh * 0.5, bfx + 6, bfy + 4);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+    }
 
     // Small overhead HP sliver for damaged regular enemies (boss has big top bar)
     if (e.kind !== 'boss' && e.hp < e.maxHp) {
@@ -1262,14 +1500,73 @@ function drawProjectile(ctx, pr) {
         return;
     }
 
+    if (pr.kind === 'clone_kunai') {
+        var kDir = pr.vx >= 0 ? 1 : -1;
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        ctx.scale(kDir, 1);
+        ctx.strokeStyle = 'rgba(255, 82, 71, 0.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-22, 0); ctx.lineTo(-4, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#f2ede2';
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(12, 0); ctx.lineTo(-4, -4.5); ctx.lineTo(-7, 0); ctx.lineTo(-4, 4.5);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
+    if (pr.kind === 'tidal_wave') {
+        // Surging Hokusai-style Sumi-e Curling Ocean Wave!
+        var wDir = pr.vx >= 0 ? 1 : -1;
+        var wr = pr.radius || 34;
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        ctx.scale(wDir, 1);
+        ctx.shadowColor = '#1ee6c8';
+        ctx.shadowBlur = 14;
+        var wg = ctx.createLinearGradient(-wr, wr, wr, -wr);
+        wg.addColorStop(0, 'rgba(8, 92, 118, 0.92)');
+        wg.addColorStop(0.6, 'rgba(30, 230, 200, 0.92)');
+        wg.addColorStop(1, '#e8ffff');
+        ctx.fillStyle = wg;
+        ctx.beginPath();
+        ctx.moveTo(-wr * 1.25, wr);
+        ctx.quadraticCurveTo(-wr * 0.3, -wr * 0.6, wr * 0.75, -wr * 0.95);
+        ctx.quadraticCurveTo(wr * 1.25, -wr * 0.45, wr * 0.55, -wr * 0.15);
+        ctx.quadraticCurveTo(wr * 0.95, wr * 0.35, wr * 0.75, wr);
+        ctx.closePath();
+        ctx.fill();
+        // White curling foam crest!
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-wr * 0.5, -wr * 0.25);
+        ctx.quadraticCurveTo(wr * 0.35, -wr * 1.05, wr * 0.92, -wr * 0.45);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(wr * 1.02, -wr * 0.22, 4.5, 0, Math.PI * 2);
+        ctx.arc(wr * 0.72, -wr * 0.88, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+
     if (pr.kind === 'jade_blade') {
         ctx.save();
         ctx.translate(pr.x, pr.y);
         ctx.rotate(pr.spin);
-        ctx.shadowColor = '#36e68a';
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = '#7dffba';
-        ctx.strokeStyle = '#0c2618';
+        ctx.shadowColor = '#1ee6c8';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#7df9ff';
+        ctx.strokeStyle = '#083a3a';
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         for (var jb = 0; jb < 3; jb++) {
@@ -1288,18 +1585,63 @@ function drawProjectile(ctx, pr) {
         var dir = pr.vx >= 0 ? 1 : -1;
         var r = pr.radius || 18;
         var isSuper = pr.power === 2;
+        var isFire = !!pr.isFire;
+        var isWater = !!pr.isWater;
+        var isRasengan = !!pr.isRasengan;
         var wobble = Math.sin(pr.spin * 1.9) * 2.2;
+
+        if (isRasengan) {
+            // 3a Shadow Ronin Spiraling Shadow Rasengan Vortex!
+            ctx.save();
+            ctx.translate(pr.x, pr.y);
+            var rg = ctx.createRadialGradient(0, 0, r * 0.15, 0, 0, r * 2.0);
+            rg.addColorStop(0, '#fff5f5');
+            rg.addColorStop(0.32, '#ff5247');
+            rg.addColorStop(0.68, 'rgba(30, 8, 12, 0.85)');
+            rg.addColorStop(1, 'rgba(220, 30, 30, 0)');
+            ctx.fillStyle = rg;
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 2.0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Swirling crimson & white Rasengan spiral chakra bands
+            ctx.rotate(pr.spin * 2.2);
+            for (var sb = 0; sb < 3; sb++) {
+                var ba = sb * (Math.PI * 2 / 3);
+                ctx.strokeStyle = (sb === 0) ? '#ffffff' : '#ff6b62';
+                ctx.lineWidth = isSuper ? 3.2 : 2.4;
+                ctx.beginPath();
+                ctx.arc(0, 0, r * (0.62 + sb * 0.18), ba, ba + Math.PI * 1.25);
+                ctx.stroke();
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.42, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
 
         ctx.save();
         ctx.translate(pr.x, pr.y);
         ctx.scale(dir, 1);
 
-        // Trailing comet chi wake
+        // Trailing comet chi / flame / water wake
         var tailLen = r * (isSuper ? 3.5 : 2.8);
         var tailGrad = ctx.createLinearGradient(-tailLen, 0, r * 0.6, 0);
-        tailGrad.addColorStop(0, 'rgba(38, 184, 255, 0)');
-        tailGrad.addColorStop(0.55, isSuper ? 'rgba(255, 210, 76, 0.55)' : 'rgba(56, 217, 255, 0.50)');
-        tailGrad.addColorStop(1, isSuper ? 'rgba(126, 240, 255, 0.92)' : 'rgba(126, 240, 255, 0.85)');
+        if (isFire) {
+            tailGrad.addColorStop(0, 'rgba(255, 60, 10, 0)');
+            tailGrad.addColorStop(0.5, 'rgba(255, 95, 20, 0.72)');
+            tailGrad.addColorStop(1, 'rgba(255, 220, 90, 0.96)');
+        } else if (isWater) {
+            tailGrad.addColorStop(0, 'rgba(15, 160, 180, 0)');
+            tailGrad.addColorStop(0.55, 'rgba(30, 230, 200, 0.65)');
+            tailGrad.addColorStop(1, 'rgba(200, 255, 255, 0.94)');
+        } else {
+            tailGrad.addColorStop(0, 'rgba(38, 184, 255, 0)');
+            tailGrad.addColorStop(0.55, isSuper ? 'rgba(255, 210, 76, 0.55)' : 'rgba(56, 217, 255, 0.50)');
+            tailGrad.addColorStop(1, isSuper ? 'rgba(126, 240, 255, 0.92)' : 'rgba(126, 240, 255, 0.85)');
+        }
         ctx.fillStyle = tailGrad;
         ctx.beginPath();
         ctx.moveTo(-tailLen, wobble * 0.6);
@@ -1309,9 +1651,19 @@ function drawProjectile(ctx, pr) {
         ctx.closePath();
         ctx.fill();
 
-        // Outer glowing chi aura
+        // Outer glowing aura
         var auraGrad = ctx.createRadialGradient(2, 0, r * 0.2, 0, 0, r * 2.0);
-        if (isSuper) {
+        if (isFire) {
+            auraGrad.addColorStop(0, '#fffbe6');
+            auraGrad.addColorStop(0.35, '#ffd24c');
+            auraGrad.addColorStop(0.7, 'rgba(255, 85, 20, 0.82)');
+            auraGrad.addColorStop(1, 'rgba(255, 50, 10, 0)');
+        } else if (isWater) {
+            auraGrad.addColorStop(0, '#ffffff');
+            auraGrad.addColorStop(0.4, '#7df9ff');
+            auraGrad.addColorStop(0.72, 'rgba(30, 230, 200, 0.7)');
+            auraGrad.addColorStop(1, 'rgba(15, 160, 180, 0)');
+        } else if (isSuper) {
             auraGrad.addColorStop(0, '#ffffff');
             auraGrad.addColorStop(0.32, '#8ef4ff');
             auraGrad.addColorStop(0.62, 'rgba(255, 210, 76, 0.78)');
@@ -1327,8 +1679,8 @@ function drawProjectile(ctx, pr) {
         ctx.arc(0, 0, r * 2.0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Classic Hadouken leading energy wave crescents
-        ctx.strokeStyle = isSuper ? '#ffd24c' : '#a8f6ff';
+        // Leading energy wave crescents
+        ctx.strokeStyle = isFire ? '#ffd24c' : (isWater ? '#c8ffff' : (isSuper ? '#ffd24c' : '#a8f6ff'));
         ctx.lineWidth = isSuper ? 3.2 : 2.4;
         ctx.beginPath();
         ctx.arc(2, 0, r * 0.95 + wobble * 0.25, -1.15, 1.15);
@@ -1489,10 +1841,43 @@ function drawSlashArc(ctx, sl) {
     }
     ctx.stroke();
 
-    // Crisp bright core line inside the brush stroke
-    ctx.strokeStyle = '#fff3d6';
-    ctx.lineWidth = Math.max(1.5, ctx.lineWidth * 0.3);
-    ctx.stroke();
+    // Crisp bright core line inside the brush stroke (+ elemental flair!)
+    if (sl.element === 'lightning') {
+        // Jagged crackling electric bolt along the slash arc!
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        for (var zi = 0; zi <= 5; zi++) {
+            var za = -0.7 + zi * 0.28;
+            var zr = r * 0.9 + ((zi % 2 === 0) ? 7 : -7);
+            var zx = Math.cos(za) * zr;
+            var zy = Math.sin(za) * zr;
+            if (zi === 0) ctx.moveTo(zx, zy);
+            else ctx.lineTo(zx, zy);
+        }
+        ctx.stroke();
+    } else if (sl.element === 'fire') {
+        ctx.strokeStyle = '#ffd24c';
+        ctx.lineWidth = Math.max(2.5, ctx.lineWidth * 0.48);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff8dc';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+    } else if (sl.element === 'water') {
+        ctx.strokeStyle = '#e8ffff';
+        ctx.lineWidth = Math.max(2.2, ctx.lineWidth * 0.42);
+        ctx.stroke();
+        // Flying splash droplets
+        ctx.fillStyle = '#e8ffff';
+        ctx.beginPath();
+        ctx.arc(r * 0.95, -14 - prog * 10, 3.2, 0, Math.PI * 2);
+        ctx.arc(r * 1.05, 8 + prog * 8, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        ctx.strokeStyle = '#fff3d6';
+        ctx.lineWidth = Math.max(1.5, ctx.lineWidth * 0.3);
+        ctx.stroke();
+    }
     ctx.restore();
 }
 

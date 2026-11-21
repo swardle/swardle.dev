@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x94543c97'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0xe7be9a22'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0x5652a1aa'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0x62d15b00'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -441,6 +441,8 @@ function runKungFuTestSuite() {
         stepSimulation(sDragon, INPUT_ATTACK);
         kfAssert(sDragon.player.action === 'dragon_upper' && !sDragon.player.onGround,
             'Dragon Fist Tier 2 3rd hit should launch dragon_upper');
+        kfAssert(sDragon.flames.length >= 1 && sDragon.flames[0].kind === 'pillar',
+            'Dragon Fist Tier 2 dragon_upper should erupt a Fire Pillar');
         for (var dt = 0; dt < 20 && (sDragon.hitstopTimer > 0 || sDragon.player.actionTick < 9); dt++) {
             stepSimulation(sDragon, INPUT_NONE);
         }
@@ -448,9 +450,9 @@ function runKungFuTestSuite() {
         kfAssert(sDragon.player.action === 'divekick', 'Dragon Fist Tier 2 air attack should be divekick, got ' + sDragon.player.action);
         var drHpBefore = drEn.hp;
         for (var dl = 0; dl < 25; dl++) stepSimulation(sDragon, INPUT_NONE);
-        kfAssert(drEn.hp < drHpBefore, 'Dragon Fist Meteor Dive landing shockwave should damage nearby enemy');
+        kfAssert(drEn.hp < drHpBefore && drEn.burnTimer > 0, 'Dragon Fist Meteor Dive should damage & ignite nearby enemy');
 
-        // 3. THUNDER MONK: Chain-Lightning (5+) + 2x Charge Triple Storm Hadouken (10+)
+        // 3. THUNDER MONK: Chain-Lightning (5+) + Sky Thunderbolts & 2x Charge Triple Storm Hadouken (10+)
         var sThunder = createSimState({ seed: 503, fighterId: 'thunder' });
         sThunder.enemies = [];
         sThunder.comboCount = 10; sThunder.comboDecayTimer = 150; sThunder.streakTier = 2;
@@ -461,6 +463,13 @@ function runKungFuTestSuite() {
         stepSimulation(sThunder, INPUT_ATTACK);
         for (var tt = 0; tt < 10; tt++) stepSimulation(sThunder, INPUT_NONE);
         kfAssert(th2.hp < th2.maxHp, 'Thunder Monk chain-lightning should arc to distant enemy');
+        // Sky Thunderbolts on Tier 2 finisher / spin!
+        stepSimulation(sThunder, INPUT_LEFT | INPUT_ATTACK);
+        var sawSkyBolt = false;
+        for (var sb = 0; sb < sThunder.bolts.length; sb++) {
+            if (sThunder.bolts[sb].isSky) sawSkyBolt = true;
+        }
+        kfAssert(sawSkyBolt, 'Thunder Monk Tier 2 spin should call down Sky Thunderbolts');
         // Fast 2x charge -> ready in half the ticks & launches 3 storm fireballs!
         sThunder.player.x = 80;
         sThunder.player.action = 'idle'; sThunder.player.actionTick = 0;
@@ -484,12 +493,14 @@ function runKungFuTestSuite() {
         ltEn.cooldown = 999;
         for (var lo = 0; lo < 30; lo++) stepSimulation(sLotus, INPUT_NONE);
         kfAssert(ltEn.hp < ltEn.maxHp, 'Lotus Blade orbiting ink blades should slice nearby enemy automatically');
-        stepSimulation(sLotus, INPUT_LEFT | INPUT_ATTACK); // spin -> omni jade blade fan!
+        stepSimulation(sLotus, INPUT_LEFT | INPUT_ATTACK); // spin -> omni water blade fan + tidal waves!
         var jadeCount = 0;
+        var waveCount = 0;
         for (var lp = 0; lp < sLotus.projectiles.length; lp++) {
             if (sLotus.projectiles[lp].kind === 'jade_blade') jadeCount++;
+            if (sLotus.projectiles[lp].kind === 'tidal_wave') waveCount++;
         }
-        kfAssert(jadeCount >= 3, 'Lotus Blade Tier 2 spin should launch jade_blade fan, got ' + jadeCount);
+        kfAssert(jadeCount >= 3 && waveCount >= 2, 'Tide Lotus Tier 2 spin should launch blade fan + tidal waves');
 
         // 5. PHANTOM GALE: Faster base movement + Early Flash-Step (3+/5+ hits) + Pinball Blitz (10+ hits)
         var sGale = createSimState({ seed: 505, fighterId: 'gale' });
@@ -501,9 +512,11 @@ function runKungFuTestSuite() {
         // Early Flash-Step at 3 hits on attack3, AND combo Flash-Step at 5 hits on attack2!
         sGale.comboCount = 5; sGale.comboDecayTimer = 150; sGale.streakTier = 1;
         sGale.player.comboStep = 1; sGale.player.comboWindow = 20;
-        stepSimulation(sGale, INPUT_ATTACK); // attack2 -> early Tier-1 Flash-Step Dash!
+        stepSimulation(sGale, INPUT_ATTACK); // attack2 -> early Tier-1 Sonic Flash-Step + Wind Cyclone!
         kfAssert(sGale.player.action === 'attack2' && sGale.player.invulnTimer >= 3 && sGale.player.vx > 10,
             'Phantom Gale Tier 1 (5+ hits) attack2 should trigger Flash-Step Dash');
+        kfAssert(sGale.flames.length >= 1 && sGale.flames[0].kind === 'cyclone',
+            'Phantom Gale Sonic Flash-Step should spawn a Razor Wind Cyclone');
         kfAssert(sGale.player.maxHp === 175, 'Phantom Gale glass-cannon maxHp should be 175');
 
         // 6. Active-Zone Enemy Softlock Guard: retreating knife ninja stays inside locked zone!

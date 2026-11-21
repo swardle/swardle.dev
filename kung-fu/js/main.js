@@ -155,7 +155,7 @@
         shadow: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M5 19l11-11-2-2 4-3 1 1-3 4 2 2-11 11H5z"/><circle cx="8" cy="7" r="3" fill="currentColor" opacity="0.55"/></svg>',
         dragon: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2c2 3 6 5 6 10a6 6 0 1 1-12 0c0-3 2-5 3-7 0 2 1 3 2 3 0-2 0-4 1-6z"/></svg>',
         thunder: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M2 13l10-7 10 7H2zm11 1l-4 7h3l-1 3 5-7h-3l1-3z"/></svg>',
-        lotus: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2l2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5z"/></svg>',
+        lotus: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 16c3-7 8-11 14-10-4 2-5 5-2 7 2 1 5 0 6-2-1 5-6 8-12 8-3 0-5-1-6-3z"/></svg>',
         gale: '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M4 17c4-1 7-4 8-11 3 3 7 3 8 6-3 1-5 2-6 5-3 2-6 2-10 0zm9-9l4 1-3 2z"/></svg>'
     };
 

@@ -53,7 +53,8 @@ function captureRenderFrame(simState, inputMask, stepResult) {
             id: e.id, kind: e.kind, x: e.x, y: e.y, facing: e.facing,
             hp: e.hp, maxHp: e.maxHp, scale: e.scale,
             state: e.state, stateTick: e.stateTick, stateDur: e.stateDur,
-            attackStyle: e.attackStyle, walkCycle: e.walkCycle, flashTimer: e.flashTimer
+            attackStyle: e.attackStyle, walkCycle: e.walkCycle,
+            flashTimer: e.flashTimer, burnTimer: e.burnTimer || 0
         };
     }
 
@@ -64,7 +65,8 @@ function captureRenderFrame(simState, inputMask, stepResult) {
             id: pr.id, kind: pr.kind || 'knife', x: pr.x, y: pr.y, vx: pr.vx,
             owner: pr.owner, spin: pr.spin,
             radius: pr.radius || 11, power: pr.power || 0,
-            color: pr.color || null,
+            color: pr.color || null, isFire: !!pr.isFire, isWater: !!pr.isWater,
+            isRasengan: !!pr.isRasengan,
             enemyKind: pr.enemyKind || null, scale: pr.scale || 1.0
         };
     }
@@ -92,7 +94,8 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         var sl = simState.slashes[s];
         slashes[s] = {
             id: sl.id, x: sl.x, y: sl.y, facing: sl.facing,
-            style: sl.style, color: sl.color, age: sl.age, maxAge: sl.maxAge
+            style: sl.style, color: sl.color, element: sl.element || null,
+            age: sl.age, maxAge: sl.maxAge
         };
     }
 
@@ -133,7 +136,18 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         var bl = srcBolts[b];
         bolts[b] = {
             id: bl.id, x1: bl.x1, y1: bl.y1, x2: bl.x2, y2: bl.y2,
-            color: bl.color, life: bl.life, maxLife: bl.maxLife
+            color: bl.color, isSky: !!bl.isSky, life: bl.life, maxLife: bl.maxLife
+        };
+    }
+
+    var srcFlames = simState.flames || [];
+    var flames = new Array(srcFlames.length);
+    for (var fl = 0; fl < srcFlames.length; fl++) {
+        var flObj = srcFlames[fl];
+        flames[fl] = {
+            id: flObj.id, kind: flObj.kind, x: flObj.x, y: flObj.y,
+            radius: flObj.radius, height: flObj.height,
+            life: flObj.life, maxLife: flObj.maxLife
         };
     }
 
@@ -174,7 +188,8 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         callouts: callouts,
         afterimages: afterimages,
         clones: clones,
-        bolts: bolts
+        bolts: bolts,
+        flames: flames
     };
 }
 
@@ -310,7 +325,8 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
                 stateDur: alpha < 0.5 ? e0.stateDur : e1.stateDur,
                 attackStyle: alpha < 0.5 ? e0.attackStyle : e1.attackStyle,
                 walkCycle: lerp(e0.walkCycle, e1.walkCycle, alpha),
-                flashTimer: alpha < 0.5 ? e0.flashTimer : e1.flashTimer
+                flashTimer: alpha < 0.5 ? e0.flashTimer : e1.flashTimer,
+                burnTimer: alpha < 0.5 ? (e0.burnTimer || 0) : (e1.burnTimer || 0)
             });
         } else if (alpha < 0.5) {
             bEnemies.push(e0);
@@ -342,6 +358,9 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
                 radius: alpha < 0.5 ? (pr0.radius || 11) : (pr1.radius || 11),
                 power: alpha < 0.5 ? (pr0.power || 0) : (pr1.power || 0),
                 color: pr0.color || null,
+                isFire: !!pr0.isFire,
+                isWater: !!pr0.isWater,
+                isRasengan: !!pr0.isRasengan,
                 enemyKind: pr0.enemyKind || null,
                 scale: pr0.scale || 1.0
             });
@@ -419,7 +438,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         if (sl1) {
             bSlashes.push({
                 id: sl0.id, x: sl0.x, y: sl0.y, facing: sl0.facing,
-                style: sl0.style, color: sl0.color,
+                style: sl0.style, color: sl0.color, element: sl0.element || null,
                 age: lerp(sl0.age, sl1.age, alpha), maxAge: sl0.maxAge
             });
         } else if (alpha < 0.5) {
@@ -501,6 +520,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         callouts: bCallouts,
         afterimages: hud.afterimages || [],
         clones: bClones,
-        bolts: hud.bolts || []
+        bolts: hud.bolts || [],
+        flames: hud.flames || []
     };
 }

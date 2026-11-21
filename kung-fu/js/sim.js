@@ -33,56 +33,56 @@ var FIGHTERS = [
         id: 'shadow',
         name: 'SHADOW RONIN',
         shortName: 'RONIN',
-        tag: 'Up to 3 Clones',
+        tag: '3 Clones + Rasengan',
         headband: '#e62e25',
         accent: '#ff5247',
         tier1Name: 'TWIN CLONES',
         tier2Name: 'SHADOW ARMY',
-        desc: '3+: 1 Clone • 5+: 2 Clones • 10+: 3 AI Clones + Substitution'
+        desc: '3+: 1 Clone • 5+: 2 Clones • 10+: 3 Kunai Clones + Shadow Rasengan'
     },
     {
         id: 'dragon',
         name: 'DRAGON FIST',
         shortName: 'DRAGON',
-        tag: 'Flame + Upper',
+        tag: 'Inferno + Pillars',
         headband: '#ff9e1b',
         accent: '#ffd24c',
-        tier1Name: 'FLAME FISTS',
-        tier2Name: 'DRAGON UPPER + DIVE',
-        desc: '5+ Hits: Faster Fiery Strikes • 10+ Hits: Dragon Uppercut & Meteor Dive'
+        tier1Name: 'INFERNO FISTS',
+        tier2Name: 'FIRE DRAGON + PILLARS',
+        desc: '5+ Hits: Flame Bursts & Ignite Burn • 10+: Fire-Dragon Upper, Pillars & Lava Dive'
     },
     {
         id: 'thunder',
         name: 'THUNDER MONK',
         shortName: 'THUNDER',
-        tag: 'Bolt + Storm',
+        tag: 'Sky Bolts + Storm',
         headband: '#38d9ff',
         accent: '#8ef4ff',
         tier1Name: 'CHAIN LIGHTNING',
-        tier2Name: 'STORM HADOUKEN',
-        desc: '5+ Hits: Arcing Lightning Hits • 10+ Hits: Fast Triple Hadouken'
+        tier2Name: 'SKY THUNDERBOLTS',
+        desc: '5+ Hits: Chain Lightning • 10+ Hits: Sky Thunderbolts & Triple Storm Ball'
     },
     {
         id: 'lotus',
-        name: 'LOTUS BLADE',
-        shortName: 'LOTUS',
-        tag: 'Orbit Blades',
-        headband: '#36e68a',
-        accent: '#7dffba',
-        tier1Name: 'ORBIT BLADES',
-        tier2Name: '3 BLADES + FAN',
-        desc: '5+ Hits: 2 Orbiting Ink Blades • 10+ Hits: 3 Blades & Shuriken Fan'
+        name: 'TIDE LOTUS',
+        shortName: 'TIDE',
+        tag: 'Water + Waves',
+        headband: '#1ee6c8',
+        accent: '#7df9ff',
+        tier1Name: 'TIDAL ORBS',
+        tier2Name: 'TIDAL WAVE',
+        desc: '5+ Hits: Swirling Water Halo & Blades • 10+ Hits: 3 Blades & Surging Tidal Wave'
     },
     {
         id: 'gale',
         name: 'PHANTOM GALE',
         shortName: 'GALE',
-        tag: 'Fast + Flash Step',
+        tag: 'Cyclones + Flash',
         headband: '#c66bff',
         accent: '#e2a8ff',
-        tier1Name: 'FLASH STEP',
+        tier1Name: 'SONIC FLASH',
         tier2Name: 'PINBALL BLITZ',
-        desc: 'Fast Move • 3+ Hits: Flash-Step • 5+: Combo Flash • 10+: Pinball Blitz'
+        desc: 'Fast Move • 3+/5+: Sonic Flash-Step & Wind Cyclones • 10+: Pinball Blitz'
     }
 ];
 
@@ -222,7 +222,8 @@ function createSimState(setup) {
         callouts: [],
         afterimages: [],
         clones: [],
-        bolts: []
+        bolts: [],
+        flames: []
     };
 
     state.player = createPlayer(state, fighterId);
@@ -306,7 +307,8 @@ function cloneSimState(state) {
         callouts: cloneArrayOfFlatObjects(state.callouts),
         afterimages: cloneArrayOfFlatObjects(state.afterimages || []),
         clones: cloneArrayOfFlatObjects(state.clones || []),
-        bolts: cloneArrayOfFlatObjects(state.bolts || [])
+        bolts: cloneArrayOfFlatObjects(state.bolts || []),
+        flames: cloneArrayOfFlatObjects(state.flames || [])
     };
 }
 
@@ -374,6 +376,9 @@ function spawnEnemy(state, kind, x, facing) {
         lastHitTrapId: -1,
         lastHitBodyId: -1,
         lastOrbitHitTick: -999,
+        lastFlameId: -1,
+        burnTimer: 0,
+        burnTick: 0,
         thrownTimer: 0,
         thrownId: -1,
         wallBounces: 0,
@@ -424,7 +429,7 @@ function spawnRingEffect(state, x, y, color, maxRadius) {
     });
 }
 
-function spawnSlashArc(state, x, y, facing, style, color) {
+function spawnSlashArc(state, x, y, facing, style, color, element) {
     state.slashes.push({
         id: allocEntityId(state),
         x: x,
@@ -432,9 +437,92 @@ function spawnSlashArc(state, x, y, facing, style, color) {
         facing: facing,
         style: style, // 'jab', 'kick', 'upper', 'air', 'counter', 'spin', 'enemy'
         color: color,
+        element: element || null, // 'fire', 'lightning', 'water'
         age: 0,
         maxAge: (style === 'counter' || style === 'upper' || style === 'spin') ? 13 : 9
     });
+}
+
+function spawnFireZone(state, kind, x, radius, dmg, life) {
+    if (!state.flames) state.flames = [];
+    if (state.flames.length >= 12) state.flames.shift();
+    state.flames.push({
+        id: allocEntityId(state),
+        kind: kind, // 'pillar', 'ground', or 'cyclone'
+        x: x,
+        y: GROUND_Y,
+        radius: radius || 30,
+        height: kind === 'pillar' ? 155 : (kind === 'cyclone' ? 118 : 34),
+        dmg: dmg || 16,
+        tickCount: 0,
+        life: life || (kind === 'pillar' ? 28 : (kind === 'cyclone' ? 26 : 130)),
+        maxLife: life || (kind === 'pillar' ? 28 : (kind === 'cyclone' ? 26 : 130))
+    });
+}
+
+function triggerSkyThunderbolts(state, p, soundEvents) {
+    // 2a Thunder Monk Tier 2: Call down vertical sky lightning bolts onto up to 2 nearby enemies!
+    var candidates = [];
+    for (var i = 0; i < state.enemies.length; i++) {
+        var en = state.enemies[i];
+        if (en.hp <= 0) continue;
+        var dist = Math.abs(en.x - p.x);
+        if (dist <= 360) {
+            candidates.push({ enemy: en, dist: dist });
+        }
+    }
+    candidates.sort(function (a, b) { return a.dist - b.dist; });
+    var count = Math.min(2, candidates.length);
+    if (count === 0) {
+        // Dramatic sky flash ahead even if solo!
+        var fx = p.x + p.facing * 95;
+        state.bolts.push({
+            id: allocEntityId(state),
+            x1: fx, y1: -10, x2: fx, y2: GROUND_Y,
+            color: '#8ef4ff', isSky: true, life: 16, maxLife: 16
+        });
+        spawnRingEffect(state, fx, GROUND_Y - 6, '#38d9ff', 64);
+        soundEvents.push('zap');
+        return;
+    }
+    for (var k = 0; k < count; k++) {
+        var target = candidates[k].enemy;
+        if (target.hp <= 0) continue;
+        state.bolts.push({
+            id: allocEntityId(state),
+            x1: target.x, y1: -10, x2: target.x, y2: target.y,
+            color: '#8ef4ff', isSky: true, life: 16, maxLife: 16
+        });
+        spawnRingEffect(state, target.x, GROUND_Y - 6, '#38d9ff', 72);
+        spawnParticles(state, target.x, target.y - 44 * target.scale, 10, '#8ef4ff', 1.8, 6.0, 1.5);
+        var dir = target.x >= p.x ? 1 : -1;
+        damageEnemy(state, target, 18, dir * 5.0, -5.8, 0, true, soundEvents, false);
+    }
+    state.screenShake = Math.max(state.screenShake, 5.5);
+    soundEvents.push('zap');
+    for (var r = state.enemies.length - 1; r >= 0; r--) {
+        if (state.enemies[r].hp <= 0) state.enemies.splice(r, 1);
+    }
+}
+
+function spawnTidalWave(state, p, isOmni) {
+    var dirs = isOmni ? [-1, 1] : [p.facing];
+    for (var i = 0; i < dirs.length; i++) {
+        state.projectiles.push({
+            id: allocEntityId(state),
+            kind: 'tidal_wave',
+            x: p.x + dirs[i] * 30,
+            y: GROUND_Y - 34,
+            vx: dirs[i] * 9.0,
+            vy: 0,
+            owner: 'player',
+            damage: 20,
+            radius: 34,
+            hitsLeft: 4,
+            spin: 0,
+            life: 52
+        });
+    }
 }
 
 function spawnCallout(state, x, y, text, color) {
@@ -571,6 +659,7 @@ function advanceToNextFloor(state, soundEvents) {
     state.afterimages = [];
     state.clones = [];
     state.bolts = [];
+    state.flames = [];
 
     var p = state.player;
     p.x = 150;
@@ -798,16 +887,19 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
         spawnRingEffect(state, p.x, p.y - 44, tier >= 1 ? fighter.accent : '#ffb830', 84);
         spawnParticles(state, p.x, p.y - 44, 12, tier >= 1 ? fighter.accent : '#ffd24c', 2.2, 6.2, 0.6);
     } else if (isGaleFlash) {
-        // Phantom Gale Early & Combo Flash-Step Dash-Through (crisp dodge i-frames)
+        // 4a Phantom Gale Sonic Flash-Step + Razor Wind Cyclone along the dash path!
         var isComboMid = (moveName === 'attack2');
         var dashSpd = isComboMid ? 11.8 : (tier >= 2 ? 16.0 : 14.5);
         var dashInvuln = isComboMid ? 4 : (tier >= 2 ? 6 : 5);
         p.invulnTimer = Math.max(p.invulnTimer, dashInvuln);
         p.vx = p.facing * dashSpd;
-        spawnRingEffect(state, p.x, p.y - 46, '#c66bff', isComboMid ? 48 : 66);
-        spawnParticles(state, p.x, p.y - 46, isComboMid ? 9 : 14, '#c66bff', 2.0, 6.6, 0.6);
+        // Double sonic-boom ring behind Gale + swirling wind cyclone!
+        spawnRingEffect(state, p.x - p.facing * 12, p.y - 46, '#ffffff', isComboMid ? 44 : 62);
+        spawnRingEffect(state, p.x, p.y - 46, '#c66bff', isComboMid ? 56 : 82);
+        spawnParticles(state, p.x, p.y - 46, isComboMid ? 10 : 15, '#e2a8ff', 2.2, 7.0, 0.8);
+        spawnFireZone(state, 'cyclone', p.x + p.facing * 20, isComboMid ? 24 : 30, isComboMid ? 10 : 14, 26);
         if (!isComboMid) {
-            spawnCallout(state, p.x, p.y - 88, 'FLASH STEP!', '#e2a8ff');
+            spawnCallout(state, p.x, p.y - 88, 'SONIC FLASH!', '#e2a8ff');
         }
         soundEvents.push('dash');
         if (state.afterimages.length >= 8) state.afterimages.shift();
@@ -823,14 +915,38 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
         }
     }
 
-    // Dragon Fist Tier 1+: fiery ink embers on every swing
-    if (fId === 'dragon' && tier >= 1) {
-        spawnParticles(state, p.x + p.facing * 26, p.y - 46, 6, '#ff9e1b', 1.4, 4.8, 0.8);
+    // Dragon Fist: always-on flame embers -> Tier 1 flame bursts -> Tier 2 erupting Fire Pillars!
+    if (fId === 'dragon') {
+        spawnParticles(state, p.x + p.facing * 26, p.y - 46, tier >= 1 ? 10 : 4, '#ff6a1a', 1.6, 5.4, 1.0);
+        if (tier >= 1) {
+            spawnParticles(state, p.x + p.facing * 42, p.y - 46, 6, '#ffd24c', 1.8, 5.6, 0.8);
+        }
+        if (tier >= 2 && (moveName === 'dragon_upper' || moveName === 'attack3' || moveName === 'counter')) {
+            spawnFireZone(state, 'pillar', p.x + p.facing * 58, 30, 18, 28);
+            soundEvents.push('flame');
+        } else if (tier >= 2 && moveName === 'spin') {
+            spawnFireZone(state, 'pillar', p.x - 58, 26, 15, 24);
+            spawnFireZone(state, 'pillar', p.x + 58, 26, 15, 24);
+            soundEvents.push('flame');
+        }
     }
 
-    // Lotus Blade Tier 2: Jade Blade Fan on finishers & 360° spin!
-    if (fId === 'lotus' && tier >= 2 && (moveName === 'attack3' || moveName === 'counter' || moveName === 'spin')) {
-        spawnJadeBladeFan(state, p, moveName === 'spin');
+    // Tide Lotus: always-on water spray -> Tier 2 Jade Blade Fan + Surging Tidal Wave!
+    if (fId === 'lotus') {
+        spawnParticles(state, p.x + p.facing * 24, p.y - 46, tier >= 1 ? 8 : 4, '#7df9ff', 1.4, 4.8, 1.0);
+        if (tier >= 2 && (moveName === 'attack3' || moveName === 'counter' || moveName === 'spin')) {
+            spawnJadeBladeFan(state, p, moveName === 'spin');
+            spawnTidalWave(state, p, moveName === 'spin');
+            soundEvents.push('splash');
+        }
+    }
+
+    // Thunder Monk: crackling lightning sparks on every swing + 2a Sky Thunderbolts at Tier 2!
+    if (fId === 'thunder') {
+        spawnParticles(state, p.x + p.facing * 26, p.y - 46, tier >= 1 ? 8 : 4, '#8ef4ff', 1.6, 5.2, 0.5);
+        if (tier >= 2 && (moveName === 'attack3' || moveName === 'counter' || moveName === 'spin')) {
+            triggerSkyThunderbolts(state, p, soundEvents);
+        }
     }
 
     var slashStyle = moveName === 'spin' ? 'spin'
@@ -839,11 +955,16 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
         : (moveName === 'attack3' || moveName === 'dragon_upper') ? 'upper'
         : (moveName === 'airkick' || moveName === 'divekick') ? 'air'
         : 'counter';
-    var slashColor = (moveName === 'counter' || moveName === 'attack3' || moveName === 'dragon_upper' || moveName === 'divekick')
-        ? '#ffb830'
-        : (tier >= 1 ? fighter.accent : '#d92828');
+    var slashElement = fId === 'dragon' ? 'fire'
+        : (fId === 'thunder' ? 'lightning' : (fId === 'lotus' ? 'water' : null));
+    var slashColor = (fId === 'dragon') ? '#ff6a1a'
+        : (fId === 'thunder') ? '#38d9ff'
+        : (fId === 'lotus') ? '#1ee6c8'
+        : ((moveName === 'counter' || moveName === 'attack3' || moveName === 'dragon_upper' || moveName === 'divekick')
+            ? '#ffb830'
+            : (tier >= 1 ? fighter.accent : '#d92828'));
     var slashX = (moveName === 'spin') ? p.x : (p.x + p.facing * 24);
-    spawnSlashArc(state, slashX, p.y - 46, p.facing, slashStyle, slashColor);
+    spawnSlashArc(state, slashX, p.y - 46, p.facing, slashStyle, slashColor, slashElement);
 
     if (moveName === 'spin') {
         soundEvents.push('spin');
@@ -860,6 +981,9 @@ function startPlayerHadouken(state, p, chargeTicks, soundEvents) {
     var damage = isMax ? 54 : 34;
     var hitsLeft = isMax ? 4 : 2;
     var isStorm = (p.fighterId === 'thunder' && getStreakTier(state) >= 2);
+    var isFire = (p.fighterId === 'dragon');
+    var isWater = (p.fighterId === 'lotus');
+    var isRasengan = (p.fighterId === 'shadow');
 
     p.action = 'hadouken';
     p.actionTick = 0;
@@ -878,13 +1002,16 @@ function startPlayerHadouken(state, p, chargeTicks, soundEvents) {
     state.projectiles.push({
         id: allocEntityId(state),
         kind: 'fireball',
+        isFire: isFire,
+        isWater: isWater,
+        isRasengan: isRasengan,
         x: spawnX,
         y: spawnY,
         vx: p.facing * speed,
         vy: 0,
         owner: 'player',
         damage: damage,
-        radius: radius,
+        radius: isRasengan ? (radius + 3) : radius,
         power: power,
         hitsLeft: hitsLeft,
         spin: 0,
@@ -915,14 +1042,21 @@ function startPlayerHadouken(state, p, chargeTicks, soundEvents) {
         }
     }
 
-    var color = isMax ? '#ffd24c' : '#38d9ff';
+    var color = isFire ? (isMax ? '#ffd24c' : '#ff6a1a')
+        : (isWater ? '#1ee6c8'
+        : (isRasengan ? (isMax ? '#ff5247' : '#ff7b72')
+        : (isMax ? '#ffd24c' : '#38d9ff')));
     spawnRingEffect(state, spawnX, spawnY, color, isMax ? 78 : 54);
     spawnParticles(state, spawnX, spawnY, isMax ? 18 : 11, color, 2.2, 7.2, 0.8);
-    spawnParticles(state, spawnX, spawnY, 6, '#ffffff', 1.5, 4.5, 0.4);
-    var label = isStorm ? 'STORM HADOU!' : (isMax ? 'SUPER HADOU!' : 'HADOU!');
+    spawnParticles(state, spawnX, spawnY, 6, isRasengan ? '#111111' : '#ffffff', 1.5, 4.5, 0.4);
+    var label = isStorm ? 'STORM HADOU!'
+        : (isFire ? (isMax ? 'INFERNO BALL!' : 'DRAGON FIRE!')
+        : (isWater ? (isMax ? 'TSUNAMI ORB!' : 'TIDAL ORB!')
+        : (isRasengan ? (isMax ? 'GIANT RASENGAN!' : 'RASENGAN!')
+        : (isMax ? 'SUPER HADOU!' : 'HADOU!'))));
     spawnCallout(state, p.x + p.facing * 12, p.y - 86, label, color);
     state.screenShake = Math.max(state.screenShake, isMax ? 7.5 : 4.2);
-    soundEvents.push(isMax || isStorm ? 'super_fireball' : 'fireball');
+    soundEvents.push(isFire ? 'flame' : (isMax || isStorm ? 'super_fireball' : 'fireball'));
 }
 
 function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents, canLaunch) {
@@ -1382,6 +1516,7 @@ function spawnShadowClone(state, slotIdx, minX, maxX, soundEvents) {
         comboWindow: 0,
         attackCooldown: 4,
         jumpCooldown: 10,
+        kunaiCooldown: 28 + slotIdx * 16,
         walkCycle: slotIdx * 1.8
     };
     state.clones.push(cl);
@@ -1461,6 +1596,7 @@ function updateShadowClones(state, minX, maxX, soundEvents) {
         if (cl.comboWindow > 0) cl.comboWindow -= 1;
         if (cl.attackCooldown > 0) cl.attackCooldown -= 1;
         if (cl.jumpCooldown > 0) cl.jumpCooldown -= 1;
+        if (cl.kunaiCooldown > 0) cl.kunaiCooldown -= 1;
 
         var isAtk = (cl.action === 'attack1' || cl.action === 'attack2' ||
                      cl.action === 'attack3' || cl.action === 'airkick');
@@ -1575,6 +1711,28 @@ function updateShadowClones(state, minX, maxX, soundEvents) {
                         } else {
                             cl.action = 'idle';
                         }
+                    } else if (cl.onGround && absTdx >= 150 && absTdx <= 340 && (cl.kunaiCooldown || 0) <= 0 && cl.attackCooldown === 0) {
+                        // 3a Shadow Clones throw mini-kunai at distant enemies!
+                        cl.kunaiCooldown = 78;
+                        cl.attackCooldown = 14;
+                        cl.action = 'attack1';
+                        cl.actionTick = 0;
+                        cl.actionDuration = 12;
+                        state.projectiles.push({
+                            id: allocEntityId(state),
+                            kind: 'clone_kunai',
+                            x: cl.x + cl.facing * 20,
+                            y: cl.y - 46,
+                            vx: cl.facing * 10.2,
+                            vy: 0,
+                            owner: 'player',
+                            damage: 11,
+                            radius: 10,
+                            hitsLeft: 1,
+                            spin: 0,
+                            life: 44
+                        });
+                        soundEvents.push('throw');
                     } else if (cl.onGround && absTdx > 130 && absTdx < 210 && cl.jumpCooldown === 0 && ((state.tick + cl.slotIndex * 19) % 47 === 0)) {
                         cl.vy = JUMP_VEL;
                         cl.vx = cl.facing * PLAYER_AIR_SPEED * 1.05;
@@ -1615,6 +1773,16 @@ function updateShadowClones(state, minX, maxX, soundEvents) {
                         if (cl.onGround) cl.action = 'idle';
                     }
                 }
+            }
+        }
+
+        // Soft horizontal separation between Shadow Clones so all 3 stay visibly fanned out!
+        for (var cj = 0; cj < state.clones.length; cj++) {
+            if (ci === cj) continue;
+            var otherCl = state.clones[cj];
+            var cSep = cl.x - otherCl.x;
+            if (Math.abs(cSep) < 28 && Math.abs(cl.y - otherCl.y) < 32) {
+                cl.vx += (cSep >= 0 ? 0.5 : -0.5);
             }
         }
 
@@ -1810,6 +1978,11 @@ function stepSimulation(state, inputMask) {
                         knockDir * effKx, spec.ky, spec.stop,
                         p.action === 'counter' || p.action === 'dragon_upper', soundEvents, launchLiving
                     );
+                    // Dragon Fist Tier 1+: set enemies visibly on fire!
+                    if (!dead && fId === 'dragon' && getStreakTier(state) >= 1) {
+                        en.burnTimer = Math.max(en.burnTimer || 0, 150);
+                        spawnParticles(state, en.x, en.y - 46 * en.scale, 6, '#ff6a1a', 1.4, 4.6, 1.4);
+                    }
                     struckEnemies.push({ id: en.id, x: en.x, y: en.y, scale: en.scale });
                     if (dead) {
                         state.enemies.splice(ei, 1);
@@ -1943,6 +2116,7 @@ function stepSimulation(state, inputMask) {
             spawnParticles(state, p.x, GROUND_Y - 4, 18, '#ff9e1b', 2.2, 7.2, 2.5);
             spawnParticles(state, p.x, GROUND_Y - 4, 10, '#111111', 1.8, 5.5, 2.0);
             spawnCallout(state, p.x, GROUND_Y - 82, 'METEOR SLAM!', '#ffd24c');
+            spawnFireZone(state, 'ground', p.x, 76, 6, 140);
             state.screenShake = Math.max(state.screenShake, 8.5);
             soundEvents.push('meteor');
             for (var md = state.enemies.length - 1; md >= 0; md--) {
@@ -1950,6 +2124,7 @@ function stepSimulation(state, inputMask) {
                 if (Math.abs(mEn.x - p.x) <= 125 && mEn.y >= GROUND_Y - 60) {
                     var mDir = mEn.x >= p.x ? 1 : -1;
                     var mDead = damageEnemy(state, mEn, 28, mDir * 9.5, -7.2, 4, true, soundEvents, true);
+                    if (!mDead) mEn.burnTimer = Math.max(mEn.burnTimer || 0, 150);
                     if (mDead) state.enemies.splice(md, 1);
                 }
             }
@@ -2037,9 +2212,61 @@ function stepSimulation(state, inputMask) {
                     oEn.lastOrbitHitTick = state.tick;
                     var oDir = oEn.x >= p.x ? 1 : -1;
                     var oDead = damageEnemy(state, oEn, 12, oDir * 4.5, -2.0, 0, false, soundEvents, false);
-                    spawnParticles(state, bx, by, 6, '#36e68a', 1.5, 4.5, 0.6);
+                    spawnParticles(state, bx, by, 7, '#7df9ff', 1.6, 4.8, 0.8);
                     if (oDead) state.enemies.splice(oe, 1);
                 }
+            }
+        }
+    }
+
+    // --- 1d. Dragon Fist Active Fire Pillars & Burning Ground Craters ---
+    if (state.flames && state.flames.length > 0) {
+        for (var fi = state.flames.length - 1; fi >= 0; fi--) {
+            var fl = state.flames[fi];
+            fl.life -= 1;
+            fl.tickCount = (fl.tickCount || 0) + 1;
+
+            if (fl.kind === 'pillar' || fl.kind === 'cyclone') {
+                // Vaporize falling roof tiles in the vertical column!
+                var isCyc = (fl.kind === 'cyclone');
+                for (var ft = state.traps.length - 1; ft >= 0; ft--) {
+                    var fTr = state.traps[ft];
+                    if (fTr.kind === 'tile' && fTr.owner !== 'player' && fTr.telegraph <= 0 &&
+                        Math.abs(fTr.x - fl.x) < fl.radius + 14 && fTr.y >= GROUND_Y - fl.height) {
+                        spawnParticles(state, fTr.x, fTr.y, 10, isCyc ? '#e2a8ff' : '#ff9e1b', 1.6, 5.2, 1.4);
+                        state.score += 90;
+                        soundEvents.push(isCyc ? 'dash' : 'flame');
+                        state.traps.splice(ft, 1);
+                    }
+                }
+                // Blast/lift enemies caught in the Fire Pillar or Wind Cyclone (once per zone)
+                if (fl.tickCount <= 16) {
+                    for (var fe = state.enemies.length - 1; fe >= 0; fe--) {
+                        var fEn = state.enemies[fe];
+                        if (fEn.lastFlameId === fl.id) continue;
+                        if (Math.abs(fEn.x - fl.x) <= fl.radius + 18 * fEn.scale && fEn.y >= GROUND_Y - fl.height) {
+                            fEn.lastFlameId = fl.id;
+                            var fDir = fEn.x >= fl.x ? 1 : -1;
+                            var fDead = damageEnemy(state, fEn, fl.dmg, fDir * (isCyc ? 7.5 : 6.5), isCyc ? -7.4 : -8.2, 0, false, soundEvents, true);
+                            if (!fDead && !isCyc) fEn.burnTimer = Math.max(fEn.burnTimer || 0, 150);
+                            if (fDead) state.enemies.splice(fe, 1);
+                        }
+                    }
+                }
+            } else if (fl.kind === 'ground' && fl.tickCount % 26 === 1) {
+                // Burning ground fire scorches enemies standing on it!
+                for (var ge = state.enemies.length - 1; ge >= 0; ge--) {
+                    var gEn = state.enemies[ge];
+                    if (Math.abs(gEn.x - fl.x) <= fl.radius + 16 * gEn.scale && gEn.y >= GROUND_Y - 36) {
+                        var gDead = damageEnemy(state, gEn, fl.dmg, 0, -1.5, 0, false, soundEvents, false);
+                        if (!gDead) gEn.burnTimer = Math.max(gEn.burnTimer || 0, 120);
+                        if (gDead) state.enemies.splice(ge, 1);
+                    }
+                }
+            }
+
+            if (fl.life <= 0) {
+                state.flames.splice(fi, 1);
             }
         }
     }
@@ -2352,7 +2579,7 @@ function stepSimulation(state, inputMask) {
             }
         }
 
-        // Crash into other enemies!
+        // Crash into other enemies! (Burning thrown enemies spread fire on impact!)
         for (var oiE = state.enemies.length - 1; oiE >= 0; oiE--) {
             var victim = state.enemies[oiE];
             if (victim.id === flyer.id || victim.lastHitBodyId === flyer.thrownId) continue;
@@ -2360,12 +2587,47 @@ function stepSimulation(state, inputMask) {
                 victim.lastHitBodyId = flyer.thrownId;
                 var bDir = flyer.vx >= 0 ? 1 : -1;
                 var vDead = damageEnemy(state, victim, 22, bDir * 8.5, -4.8, 3, false, soundEvents, false);
+                if (!vDead && (flyer.burnTimer || 0) > 0) {
+                    victim.burnTimer = Math.max(victim.burnTimer || 0, 120);
+                }
                 spawnRingEffect(state, victim.x, victim.y - 44, '#ffb830', 48);
                 spawnCallout(state, victim.x, victim.y - 74, 'CRASH!', '#ffb830');
                 state.score += 100;
                 if (vDead) {
                     state.enemies.splice(oiE, 1);
                     if (oiE < tiE) tiE--;
+                }
+            }
+        }
+    }
+
+    // --- 4c. Burning Enemy Flame Damage-Over-Time ---
+    for (var biE = state.enemies.length - 1; biE >= 0; biE--) {
+        var bEn = state.enemies[biE];
+        if ((bEn.burnTimer || 0) > 0) {
+            bEn.burnTimer -= 1;
+            bEn.burnTick = (bEn.burnTick || 0) + 1;
+            if (bEn.burnTick % 10 === 0) {
+                spawnParticles(state, bEn.x, bEn.y - 42 * bEn.scale, 2, '#ff6a1a', 0.6, 2.2, 2.2);
+            }
+            if (bEn.burnTick % 30 === 0) {
+                bEn.hp -= 5;
+                bEn.flashTimer = 4;
+                spawnParticles(state, bEn.x, bEn.y - 44 * bEn.scale, 5, '#ffd24c', 1.2, 3.8, 1.8);
+                if (bEn.hp <= 0) {
+                    state.enemiesDefeated += 1;
+                    state.score += bEn.scoreVal;
+                    spawnParticles(state, bEn.x, bEn.y - 44 * bEn.scale, 14, '#ff6a1a', 1.8, 6.2, 2.2);
+                    spawnCallout(state, bEn.x, bEn.y - 76, bEn.kind === 'boss' ? 'MASTER DEFEATED!' : 'BURNED!', '#ff9e1b');
+                    soundEvents.push(bEn.kind === 'boss' ? 'boss_ko' : 'ko');
+                    if (bEn.kind === 'boss') {
+                        state.bossDefeated = true;
+                        state.floorClearTimer = 95;
+                        state.score += 500 * state.floor;
+                        state.bannerText = 'FLOOR ' + state.floor + ' CLEAR!';
+                        state.bannerTimer = 95;
+                    }
+                    state.enemies.splice(biE, 1);
                 }
             }
         }
@@ -2394,7 +2656,7 @@ function stepSimulation(state, inputMask) {
             spawnParticles(state, pr.x, GROUND_Y - 2, 6, '#38d9ff', 1.2, 4.0, 1.5);
             soundEvents.push('block');
         }
-        if (!removeProj && pr.owner === 'player' && pr.kind !== 'fireball' && pr.kind !== 'ko_body' && pr.kind !== 'crescent' && pr.kind !== 'jade_blade' && pr.y >= GROUND_Y - 4 && pr.vy > 0) {
+        if (!removeProj && pr.owner === 'player' && pr.kind !== 'fireball' && pr.kind !== 'ko_body' && pr.kind !== 'crescent' && pr.kind !== 'jade_blade' && pr.kind !== 'tidal_wave' && pr.kind !== 'clone_kunai' && pr.y >= GROUND_Y - 4 && pr.vy > 0) {
             if (!pr.bounced) {
                 pr.y = GROUND_Y - 4;
                 pr.vy = -Math.max(4.6, Math.abs(pr.vy) * 0.72);
@@ -2494,10 +2756,13 @@ function stepSimulation(state, inputMask) {
                     removeProj = true;
                 }
             }
-        } else if (!removeProj && pr.owner === 'player' && (pr.kind === 'fireball' || pr.kind === 'crescent' || pr.kind === 'jade_blade')) {
+        } else if (!removeProj && pr.owner === 'player' && (pr.kind === 'fireball' || pr.kind === 'crescent' || pr.kind === 'jade_blade' || pr.kind === 'tidal_wave' || pr.kind === 'clone_kunai')) {
             var fbRad = pr.radius || 18;
-            var fbColor = pr.kind === 'crescent' ? (pr.color || '#ff5247')
-                : pr.kind === 'jade_blade' ? '#36e68a'
+            var fbColor = pr.kind === 'crescent' || pr.kind === 'clone_kunai' ? (pr.color || '#ff5247')
+                : (pr.kind === 'jade_blade' || pr.kind === 'tidal_wave') ? '#1ee6c8'
+                : pr.isFire ? (pr.power === 2 ? '#ffd24c' : '#ff6a1a')
+                : pr.isWater ? '#1ee6c8'
+                : pr.isRasengan ? '#ff5247'
                 : (pr.power === 2 ? '#ffd24c' : '#38d9ff');
 
             // Vaporize incoming enemy projectiles on clash
@@ -2543,6 +2808,10 @@ function stepSimulation(state, inputMask) {
                     var ky = pr.power === 2 ? -5.5 : -3.5;
                     var hitStopP = pr.kind === 'fireball' ? (pr.power === 2 ? 5 : 4) : 2;
                     var killed = damageEnemy(state, target, pr.damage, kx, ky, hitStopP, pr.power === 2, soundEvents);
+                    if (pr.isFire) {
+                        if (!killed) target.burnTimer = Math.max(target.burnTimer || 0, 150);
+                        spawnFireZone(state, 'ground', target.x, 54, 6, 110);
+                    }
                     spawnRingEffect(state, pr.x, pr.y, fbColor, pr.power === 2 ? 68 : 44);
                     spawnParticles(state, pr.x, pr.y, pr.power === 2 ? 14 : 8, fbColor, 2.0, 6.2, 0.8);
                     if (killed) state.enemies.splice(ej, 1);

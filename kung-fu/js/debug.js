@@ -95,6 +95,13 @@ function hashSimState(state) {
         h = fnv1aMixString(h, cObj.action);
     }
 
+    var flamesList = state.flames || [];
+    h = fnv1aMixUint32(h, flamesList.length);
+    for (var fl = 0; fl < flamesList.length; fl++) {
+        h = fnv1aMixUint32(h, flamesList[fl].id);
+        h = fnv1aMixUint32(h, flamesList[fl].life);
+    }
+
     h = fnv1aMixUint32(h, state.enemies.length);
     for (var i = 0; i < state.enemies.length; i++) {
         var e = state.enemies[i];

@@ -152,6 +152,12 @@ function playSimSoundEvents(audio, stepResult) {
             } else if (ev === 'meteor') {
                 audio.hitSynth.triggerAttackRelease('E1', '8n', t);
                 audio.gongSynth.triggerAttackRelease(['D3', 'A3', 'D4'], 0.28, t);
+            } else if (ev === 'flame') {
+                audio.swingSynth.triggerAttackRelease('8n', t);
+                audio.hitSynth.triggerAttackRelease('A1', '16n', t);
+            } else if (ev === 'splash') {
+                audio.swingSynth.triggerAttackRelease('16n', t);
+                audio.blockSynth.triggerAttackRelease('E5', '32n', t);
             } else if (ev === 'player_ko') {
                 audio.hitSynth.triggerAttackRelease('C1', '2n', t);
                 audio.gongSynth.triggerAttackRelease(['D2', 'F2', 'A2'], 0.65, t);
