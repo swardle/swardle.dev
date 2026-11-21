@@ -162,18 +162,20 @@ function runKungFuTestSuite() {
         for (var i = 0; i < 120; i++) {
             var m = (i % 11 === 0) ? INPUT_ATTACK : ((i % 23 === 0) ? (INPUT_RIGHT | INPUT_JUMP) : INPUT_RIGHT);
             inputs.push(m);
-            stepSimulation(sim, m);
-            pushReplayFrame(ring, sim);
+            var stepRes = stepSimulation(sim, m);
+            pushReplayFrame(ring, sim, m, stepRes);
             hashes.push(hashSimState(sim));
         }
 
         kfAssert(getReplayLength(ring) === 50, 'Ring buffer should cap at 50');
         kfAssert(getReplayEntry(ring, 0).tick === 71, 'Oldest tick expected 71');
         kfAssert(getReplayEntry(ring, 49).tick === 120, 'Newest tick expected 120');
+        kfAssert(getReplayEntry(ring, 49).renderFrame.inputMask === inputs[119], 'Replay frame missing recorded inputMask');
 
-        // Sub-frame blend sanity check
+        // Sub-frame blend sanity check (including preserved inputMask)
         var midBlend = sampleBlendedReplayFrame(ring, 24.5);
         kfAssert(midBlend && Number.isFinite(midBlend.player.x) && Number.isFinite(midBlend.cameraX), 'Invalid blended frame');
+        kfAssert(typeof midBlend.inputMask === 'number', 'Blended frame missing inputMask');
 
         // Play From Here restore
         var snap = getReplayEntry(ring, 20);

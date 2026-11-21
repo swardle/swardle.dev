@@ -25,8 +25,23 @@ function clearReplayBuffer(buf) {
     buf.count = 0;
 }
 
+function classifyReplayMarker(stepResult) {
+    if (!stepResult || !stepResult.soundEvents || stepResult.soundEvents.length === 0) {
+        return null;
+    }
+    var evs = stepResult.soundEvents;
+    var hasKill = false;
+    for (var i = 0; i < evs.length; i++) {
+        var ev = evs[i];
+        if (ev === 'player_death') return 'damage';
+        if (ev === 'level_up') return 'level';
+        if (ev === 'explosion') hasKill = true;
+    }
+    return hasKill ? 'ko' : null;
+}
+
 // Extracts a compact render keyframe from the current simulation state
-function captureRenderFrame(simState, stepResult) {
+function captureRenderFrame(simState, stepResult, inputMask) {
     var p = simState.player;
     var bullets = new Array(simState.bullets.length);
     for (var i = 0; i < simState.bullets.length; i++) {
@@ -48,6 +63,8 @@ function captureRenderFrame(simState, stepResult) {
 
     return {
         tick: simState.tick,
+        inputMask: (typeof inputMask === 'number') ? (inputMask | 0) : 0,
+        marker: classifyReplayMarker(stepResult),
         worldWidth: simState.setup.worldWidth,
         worldHeight: simState.setup.worldHeight,
         score: simState.score,
@@ -80,10 +97,10 @@ function captureRenderFrame(simState, stepResult) {
     };
 }
 
-function pushReplayFrame(buf, simState, stepResult) {
+function pushReplayFrame(buf, simState, stepResult, inputMask) {
     var entry = {
         tick: simState.tick,
-        renderFrame: captureRenderFrame(simState, stepResult),
+        renderFrame: captureRenderFrame(simState, stepResult, inputMask),
         simSnapshot: cloneSimState(simState)
     };
 
@@ -331,6 +348,8 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
     var hudFrame = alpha < 0.5 ? f0 : f1;
     return {
         tick: f0.tick + alpha,
+        inputMask: f1.inputMask || 0,
+        marker: hudFrame.marker || null,
         worldWidth: f0.worldWidth,
         worldHeight: f0.worldHeight,
         score: hudFrame.score,

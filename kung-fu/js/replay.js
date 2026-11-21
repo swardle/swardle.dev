@@ -25,7 +25,26 @@ function clearReplayBuffer(buf) {
     buf.count = 0;
 }
 
-function captureRenderFrame(simState) {
+function classifyReplayMarker(stepResult) {
+    if (!stepResult || !stepResult.soundEvents || stepResult.soundEvents.length === 0) {
+        return null;
+    }
+    var evs = stepResult.soundEvents;
+    // Priority: parry (gold) > boss_ko / ko (red) > player_hit / player_ko (magenta)
+    var hasKo = false;
+    var hasDmg = false;
+    for (var i = 0; i < evs.length; i++) {
+        var ev = evs[i];
+        if (ev === 'parry') return 'parry';
+        if (ev === 'boss_ko' || ev === 'ko') hasKo = true;
+        if (ev === 'player_hit' || ev === 'player_ko') hasDmg = true;
+    }
+    if (hasKo) return 'ko';
+    if (hasDmg) return 'damage';
+    return null;
+}
+
+function captureRenderFrame(simState, inputMask, stepResult) {
     var p = simState.player;
     var enemies = new Array(simState.enemies.length);
     for (var i = 0; i < simState.enemies.length; i++) {
@@ -85,6 +104,8 @@ function captureRenderFrame(simState) {
 
     return {
         tick: simState.tick,
+        inputMask: (typeof inputMask === 'number') ? (inputMask | 0) : 0,
+        marker: classifyReplayMarker(stepResult),
         viewWidth: simState.setup.viewWidth,
         viewHeight: simState.setup.viewHeight,
         floor: simState.floor,
@@ -114,10 +135,10 @@ function captureRenderFrame(simState) {
     };
 }
 
-function pushReplayFrame(buf, simState) {
+function pushReplayFrame(buf, simState, inputMask, stepResult) {
     var entry = {
         tick: simState.tick,
-        renderFrame: captureRenderFrame(simState),
+        renderFrame: captureRenderFrame(simState, inputMask, stepResult),
         simSnapshot: cloneSimState(simState)
     };
 
@@ -370,6 +391,8 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
 
     return {
         tick: f0.tick + alpha,
+        inputMask: f1.inputMask || 0,
+        marker: hud.marker || null,
         viewWidth: f0.viewWidth,
         viewHeight: f0.viewHeight,
         floor: f0.floor,

@@ -42,14 +42,20 @@
 
     // In-Game Replay Bar
     var replayBar         = document.getElementById('replay-bar');
+    var replayShowPill    = document.getElementById('replay-show-pill');
+    var replayMarkers     = document.getElementById('replay-markers');
     var replayScrubber    = document.getElementById('replay-scrubber');
     var replayInfoText    = document.getElementById('replay-info-text');
-    var replaySpeedBtns   = document.querySelectorAll('.replay-speed-btn');
+    var replayPlayToggle  = document.getElementById('replay-play-toggle');
+    var replaySpeedDown   = document.getElementById('replay-speed-down');
+    var replaySpeedLabel  = document.getElementById('replay-speed-label');
+    var replaySpeedUp     = document.getElementById('replay-speed-up');
     var replayStepBackBtn = document.getElementById('replay-step-back');
     var replayStepSubBack = document.getElementById('replay-step-sub-back');
     var replayStepSubFwd  = document.getElementById('replay-step-sub-fwd');
     var replayStepFwdBtn  = document.getElementById('replay-step-fwd');
     var replayPlayHereBtn = document.getElementById('replay-play-here-btn');
+    var replayHideBtn     = document.getElementById('replay-hide-btn');
     var replayExitBtn     = document.getElementById('replay-exit-btn');
 
     // --- Core Subsystems ---
@@ -62,6 +68,7 @@
 
     // --- Application State ---
     var simState        = null;
+    var lastInputMask   = INPUT_NONE;
     var cssWidth        = 800;
     var cssHeight       = 600;
     var canvasWidth     = 800;
@@ -83,8 +90,11 @@
     var FIXED_STEP_MS   = 1000.0 / SIM_TICK_RATE;
 
     // Replay viewer state (completely separate from input playback!)
+    var REPLAY_SPEEDS   = [-2, -1, -0.25, 0, 0.25, 0.5, 1, 2];
     var replayCursor    = 0.0; // float index into replayBuf [0 .. count-1]
     var replaySpeed     = 0.0; // 0 = paused, 0.25, 0.5, 1, 2, -0.25, -1, -2
+    var replayLastSpeed = 1.0;
+    var replayBarHidden = false;
     var replayDragging  = false;
 
     // ------------------------------------------------------------------------
@@ -101,6 +111,7 @@
 
         // Redraw static view if paused/replay/gameover
         if (appMode === 'replay') {
+            drawReplayTimelineMarkers();
             renderReplayCurrent();
         } else if (simState && (appMode === 'paused' || appMode === 'gameover')) {
             renderGameFrame(ctx, canvasWidth, canvasHeight, captureRenderFrame(simState, null), { clearHard: true, dpr: canvasDpr });
@@ -261,6 +272,43 @@
     // ------------------------------------------------------------------------
     // In-Game Replay System Controls
     // ------------------------------------------------------------------------
+    function setReplayBarHidden(hidden) {
+        replayBarHidden = !!hidden;
+        if (replayBarHidden) document.body.classList.add('replay-bar-hidden');
+        else document.body.classList.remove('replay-bar-hidden');
+        if (appMode === 'replay') {
+            if (!replayBarHidden) drawReplayTimelineMarkers();
+            renderReplayCurrent();
+        }
+    }
+
+    function drawReplayTimelineMarkers() {
+        if (!replayMarkers) return;
+        var count = getReplayLength(replayBuf);
+        var w = Math.max(100, replayMarkers.clientWidth || (cssWidth - 32));
+        var dpr = canvasDpr || 1;
+        replayMarkers.width = Math.round(w * dpr);
+        replayMarkers.height = Math.round(7 * dpr);
+        var mctx = replayMarkers.getContext('2d');
+        mctx.clearRect(0, 0, replayMarkers.width, replayMarkers.height);
+        if (count < 2) return;
+
+        mctx.fillStyle = 'rgba(255, 0, 255, 0.16)';
+        mctx.fillRect(0, Math.round(3 * dpr), replayMarkers.width, Math.max(1, Math.round(dpr)));
+
+        var maxIdx = count - 1;
+        var tickW = Math.max(2, Math.round(2.5 * dpr));
+        for (var i = 0; i < count; i++) {
+            var mk = getReplayEntry(replayBuf, i).renderFrame.marker;
+            if (!mk) continue;
+            var mx = Math.round((i / maxIdx) * (replayMarkers.width - tickW));
+            if (mk === 'level') mctx.fillStyle = '#ff0';
+            else if (mk === 'damage') mctx.fillStyle = '#f33';
+            else mctx.fillStyle = '#f0f';
+            mctx.fillRect(mx, 0, tickW, replayMarkers.height);
+        }
+    }
+
     function enterReplayMode() {
         if (getReplayLength(replayBuf) < 1) return;
         if (appMode === 'replay') return;
@@ -274,6 +322,7 @@
         var maxIdx = getReplayLength(replayBuf) - 1;
         replayCursor = maxIdx;
         replaySpeed = 0.0; // Start paused on current frame so player can scrub or pick speed
+        replayBarHidden = false;
 
         replayScrubber.min = '0';
         replayScrubber.max = String(maxIdx);
@@ -282,8 +331,10 @@
 
         replayBar.style.display = 'flex';
         document.body.classList.add('replay-mode-active');
+        document.body.classList.remove('replay-bar-hidden');
         updateReplaySpeedButtons();
         updateHudButtons();
+        drawReplayTimelineMarkers();
         renderReplayCurrent();
     }
 
@@ -310,7 +361,9 @@
 
     function hideReplayBar() {
         replayBar.style.display = 'none';
+        replayBarHidden = false;
         document.body.classList.remove('replay-mode-active');
+        document.body.classList.remove('replay-bar-hidden');
     }
 
     // Restore exact simulation state from the scrubbed replay frame and play live from there!
@@ -375,18 +428,41 @@
 
     function setReplaySpeed(spd) {
         replaySpeed = spd;
+        if (spd !== 0) replayLastSpeed = spd;
         updateReplaySpeedButtons();
     }
 
-    function updateReplaySpeedButtons() {
-        for (var i = 0; i < replaySpeedBtns.length; i++) {
-            var btn = replaySpeedBtns[i];
-            var val = parseFloat(btn.getAttribute('data-speed'));
-            if (Math.abs(val - replaySpeed) < 1e-6) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
+    function stepReplaySpeed(dir) {
+        var idx = REPLAY_SPEEDS.indexOf(replaySpeed);
+        if (idx === -1) idx = 3;
+        idx = Math.max(0, Math.min(REPLAY_SPEEDS.length - 1, idx + dir));
+        setReplaySpeed(REPLAY_SPEEDS[idx]);
+        renderReplayCurrent();
+    }
+
+    function toggleReplayPlayPause() {
+        if (replaySpeed === 0) {
+            var target = replayLastSpeed || 1.0;
+            var maxIdx = Math.max(0, getReplayLength(replayBuf) - 1);
+            if (target > 0 && replayCursor >= maxIdx - 0.1) {
+                replayCursor = 0;
+                replayScrubber.value = '0';
             }
+            setReplaySpeed(target);
+        } else {
+            setReplaySpeed(0);
+        }
+        renderReplayCurrent();
+    }
+
+    function updateReplaySpeedButtons() {
+        if (replayPlayToggle) {
+            replayPlayToggle.textContent = (replaySpeed === 0) ? '▶' : '⏸';
+        }
+        if (replaySpeedLabel) {
+            replaySpeedLabel.textContent = (replaySpeed === 0) ? 'PAUSE' : (replaySpeed + 'x');
+            if (replaySpeed === 0) replaySpeedLabel.classList.remove('active');
+            else replaySpeedLabel.classList.add('active');
         }
     }
 
@@ -407,18 +483,19 @@
         if (!blended) return;
 
         var speedLabel = replaySpeed === 0 ? 'PAUSED' : (replaySpeed + 'x');
-        var tickStr = blended.tick.toFixed(2);
-        var secs = (blended.tick / SIM_TICK_RATE).toFixed(2);
+        var tickStr = blended.tick.toFixed(1);
+        var secs = (blended.tick / SIM_TICK_RATE).toFixed(1);
 
-        replayInfoText.textContent =
-            'TICK ' + tickStr + ' (' + secs + 's) | ' + speedLabel;
+        replayInfoText.textContent = 'T ' + tickStr + ' (' + secs + 's)';
 
         renderGameFrame(ctx, canvasWidth, canvasHeight, blended, {
             clearHard: true,
             dpr: canvasDpr,
-            modeBadge: 'REPLAY ' + speedLabel + '  TICK ' + tickStr,
+            modeBadge: replayBarHidden ? ('REPLAY ' + speedLabel + '  T:' + tickStr) : null,
             badgeColor: '#f0f',
-            borderColor: 'rgba(255, 0, 255, 0.7)'
+            borderColor: 'rgba(255, 0, 255, 0.7)',
+            inputMask: blended.inputMask,
+            inputBottom: true
         });
     }
 
@@ -674,6 +751,7 @@
             accumulatorMs -= FIXED_STEP_MS;
 
             var inputMask = getTickInput(inputCtrl, simState.tick, simState);
+            lastInputMask = inputMask;
 
             // Stop cleanly if saved input playback reached end of file
             if (isInputPlaybackMode(inputCtrl) && inputCtrl.playbackFinished) {
@@ -702,7 +780,7 @@
             stepped = true;
 
             // Record output keyframe into Replay ring buffer (separate from input!)
-            pushReplayFrame(replayBuf, simState, lastStepResult);
+            pushReplayFrame(replayBuf, simState, lastStepResult, inputMask);
 
             // Dev-only determinism logging & live divergence check
             var mismatch = logDeterminismTick(devLogger, simState, inputMask);
@@ -752,10 +830,17 @@
                 badgeColor = '#0ff';
             }
 
+            var showButtons = (appMode === 'demo' || appMode === 'title' || isInputPlaybackMode(inputCtrl));
             renderGameFrame(
                 ctx, canvasWidth, canvasHeight,
-                captureRenderFrame(simState, lastStepResult),
-                { clearHard: false, dpr: canvasDpr, modeBadge: badge, badgeColor: badgeColor }
+                captureRenderFrame(simState, lastStepResult, lastInputMask),
+                {
+                    clearHard: false,
+                    dpr: canvasDpr,
+                    modeBadge: badge,
+                    badgeColor: badgeColor,
+                    inputMask: showButtons ? lastInputMask : undefined
+                }
             );
             updateHudButtons();
         }
@@ -816,9 +901,12 @@
             }
 
             if (appMode === 'replay') {
-                if (e.code === 'Space' && !e.repeat) {
+                if (lower === 'h' && !e.repeat) {
                     e.preventDefault();
-                    setReplaySpeed(replaySpeed === 0 ? 1.0 : 0.0);
+                    setReplayBarHidden(!replayBarHidden);
+                } else if (e.code === 'Space' && !e.repeat) {
+                    e.preventDefault();
+                    toggleReplayPlayPause();
                 } else if (e.key === 'ArrowLeft') {
                     e.preventDefault();
                     stepReplayCursor(e.shiftKey ? -0.25 : -1);
@@ -897,12 +985,15 @@
             renderReplayCurrent();
         });
 
-        for (var i = 0; i < replaySpeedBtns.length; i++) {
-            replaySpeedBtns[i].addEventListener('click', function (e) {
-                setReplaySpeed(parseFloat(e.currentTarget.getAttribute('data-speed')));
-                renderReplayCurrent();
-            });
-        }
+        replayPlayToggle.addEventListener('click', toggleReplayPlayPause);
+        replaySpeedDown.addEventListener('click', function () { stepReplaySpeed(-1); });
+        replaySpeedUp.addEventListener('click', function () { stepReplaySpeed(1); });
+        replaySpeedLabel.addEventListener('click', function () {
+            setReplaySpeed(replaySpeed === 1 ? 0 : 1);
+            renderReplayCurrent();
+        });
+        replayHideBtn.addEventListener('click', function () { setReplayBarHidden(true); });
+        replayShowPill.addEventListener('click', function () { setReplayBarHidden(false); });
 
         replayStepBackBtn.addEventListener('click', function () { stepReplayCursor(-1); });
         replayStepSubBack.addEventListener('click', function () { stepReplayCursor(-0.25); });

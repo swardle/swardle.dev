@@ -229,9 +229,12 @@ function renderGameFrame(ctx, canvasW, canvasH, frame, opts) {
         ctx.restore();
     }
 
-    // 10. Optional Live Button-Press Visualizer (Self-Play AI & Saved Input Playback)
+    // 10. Optional Live Button-Press Visualizer (Self-Play AI, Saved Input, & Replay)
     if (typeof options.inputMask === 'number') {
-        drawInputVisualizer(ctx, options.inputMask, dpr, options.modeBadge ? 26 * dpr : 10 * dpr);
+        var vizY = options.inputBottom
+            ? (canvasH - Math.round(30 * dpr))
+            : (options.modeBadge ? 26 * dpr : 10 * dpr);
+        drawInputVisualizer(ctx, options.inputMask, dpr, vizY);
     }
 
     if (options.borderColor) {

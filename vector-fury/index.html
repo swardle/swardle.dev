@@ -329,33 +329,75 @@
             color: #f66;
         }
 
-        /* In-Game Replay Control Bar */
+        /* Compact Top-Edge In-Game Replay Strip */
         #replay-bar {
             display: none;
             position: absolute;
-            left: 10px;
-            right: 10px;
-            bottom: 10px;
-            background: rgba(6, 0, 12, 0.92);
-            border: 2px solid #f0f;
-            box-shadow: 0 0 14px rgba(255, 0, 255, 0.5);
-            padding: 10px 12px;
+            top: 6px;
+            left: 8px;
+            right: 8px;
+            background: rgba(6, 0, 12, 0.90);
+            border: 1.5px solid #f0f;
+            box-shadow: 0 2px 12px rgba(255, 0, 255, 0.4);
+            padding: 5px 8px;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
             z-index: 50;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         }
 
-        .replay-top-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.62rem;
+        .replay-bar-hidden #replay-bar {
+            display: none !important;
+        }
+
+        .replay-mode-active #top-hud {
+            display: none !important;
+        }
+
+        #replay-show-pill {
+            display: none;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 52;
+            padding: 5px 9px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.68rem;
+            font-weight: bold;
+            background: rgba(6, 0, 12, 0.82);
             color: #f0f;
+            border: 1px solid #f0f;
+            cursor: pointer;
+        }
+
+        #replay-show-pill:hover {
+            background: #f0f;
+            color: #000;
+        }
+
+        .replay-mode-active.replay-bar-hidden #replay-show-pill {
+            display: inline-block;
+        }
+
+        .replay-scrubber-wrap {
+            position: relative;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        #replay-markers {
+            width: 100%;
+            height: 7px;
+            display: block;
+            pointer-events: none;
         }
 
         #replay-scrubber {
             width: 100%;
+            height: 14px;
+            margin: 0;
             accent-color: #f0f;
             cursor: pointer;
         }
@@ -365,22 +407,31 @@
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
         }
 
         .replay-btn-group {
             display: flex;
             flex-wrap: wrap;
-            gap: 4px;
+            align-items: center;
+            gap: 3px;
+        }
+
+        #replay-info-text {
+            font-size: 0.66rem;
+            color: #f9f;
+            margin-right: 4px;
+            white-space: nowrap;
         }
 
         .replay-btn {
-            padding: 5px 8px;
-            font-family: 'Press Start 2P', monospace;
-            font-size: 0.55rem;
+            padding: 3px 6px;
+            font-family: inherit;
+            font-size: 0.64rem;
+            font-weight: bold;
             background: #000;
             color: #f0f;
-            border: 1px solid #f0f;
+            border: 1px solid rgba(255, 0, 255, 0.75);
             cursor: pointer;
         }
 
@@ -390,25 +441,17 @@
             color: #000;
         }
 
-        #replay-play-here-btn {
-            color: #0f0;
-            border-color: #0f0;
+        #replay-speed-label {
+            min-width: 44px;
+            text-align: center;
         }
 
-        #replay-play-here-btn:hover {
-            background: #0f0;
-            color: #000;
-        }
-
-        #replay-exit-btn {
-            color: #0ff;
-            border-color: #0ff;
-        }
-
-        #replay-exit-btn:hover {
-            background: #0ff;
-            color: #000;
-        }
+        #replay-play-here-btn { color: #0f0; border-color: #0f0; }
+        #replay-play-here-btn:hover { background: #0f0; color: #000; }
+        #replay-hide-btn { color: #ff0; border-color: rgba(255, 255, 0, 0.7); }
+        #replay-hide-btn:hover { background: #ff0; color: #000; }
+        #replay-exit-btn { color: #0ff; border-color: #0ff; }
+        #replay-exit-btn:hover { background: #0ff; color: #000; }
 
         /* Mobile Controls */
         #mobile-controls {
@@ -530,34 +573,32 @@
             </div>
         </div>
 
-        <!-- In-Game Replay Controls -->
+        <!-- Tiny corner pill when Replay bar is hidden (H) -->
+        <button id="replay-show-pill" title="Show Replay Controls (H)">REPLAY [H]</button>
+
+        <!-- Compact Top-Edge In-Game Replay Strip -->
         <div id="replay-bar">
-            <div class="replay-top-row">
-                <span>IN-GAME REPLAY (Enter = Play Here, Space = Play/Pause, Arrows = Step)</span>
-                <span id="replay-info-text">TICK 0.00</span>
-            </div>
-            <input type="range" id="replay-scrubber" min="0" max="0" step="0.05" value="0">
             <div class="replay-controls-row">
                 <div class="replay-btn-group">
-                    <button class="replay-btn replay-speed-btn" data-speed="-2">-2x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="-1">-1x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="-0.25">-0.25x</button>
-                    <button class="replay-btn replay-speed-btn active" data-speed="0">PAUSE</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="0.25">0.25x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="0.5">0.5x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="1">1x</button>
-                    <button class="replay-btn replay-speed-btn" data-speed="2">2x</button>
-                </div>
-                <div class="replay-btn-group">
+                    <button class="replay-btn" id="replay-play-toggle" title="Play / Pause (Space)">▶</button>
+                    <button class="replay-btn" id="replay-speed-down" title="Slower / Reverse">«</button>
+                    <button class="replay-btn active" id="replay-speed-label" title="Toggle 1x / Pause">PAUSE</button>
+                    <button class="replay-btn" id="replay-speed-up" title="Faster">»</button>
                     <button class="replay-btn" id="replay-step-back" title="Step back 1 frame">-1f</button>
-                    <button class="replay-btn" id="replay-step-sub-back" title="Step back 0.25 frame">-0.25f</button>
-                    <button class="replay-btn" id="replay-step-sub-fwd" title="Step forward 0.25 frame">+0.25f</button>
+                    <button class="replay-btn" id="replay-step-sub-back" title="Step back 0.25 frame">-¼</button>
+                    <button class="replay-btn" id="replay-step-sub-fwd" title="Step forward 0.25 frame">+¼</button>
                     <button class="replay-btn" id="replay-step-fwd" title="Step forward 1 frame">+1f</button>
                 </div>
                 <div class="replay-btn-group">
-                    <button class="replay-btn" id="replay-play-here-btn">PLAY FROM HERE</button>
-                    <button class="replay-btn" id="replay-exit-btn">EXIT [R]</button>
+                    <span id="replay-info-text">T 0.0</span>
+                    <button class="replay-btn" id="replay-play-here-btn" title="Resume live play from here (Enter)">PLAY HERE</button>
+                    <button class="replay-btn" id="replay-hide-btn" title="Hide Replay Bar (H)">HIDE [H]</button>
+                    <button class="replay-btn" id="replay-exit-btn" title="Exit Replay (R)">EXIT</button>
                 </div>
+            </div>
+            <div class="replay-scrubber-wrap" title="Markers: Gold = Level Up, Magenta = Kill, Red = Death">
+                <canvas id="replay-markers" height="7"></canvas>
+                <input type="range" id="replay-scrubber" min="0" max="0" step="0.05" value="0">
             </div>
         </div>
 

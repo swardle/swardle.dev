@@ -167,8 +167,8 @@ function renderGameFrame(ctx, canvasWidth, canvasHeight, frame, options) {
     ctx.restore();
 
     // Optional top-left status badge (REPLAY / INPUT PLAYBACK), scaled for HiDPI
+    var dpr = opts.dpr || 1;
     if (opts.modeBadge) {
-        var dpr = opts.dpr || 1;
         ctx.save();
         ctx.font = Math.round(11 * dpr) + "px 'Press Start 2P', monospace";
         ctx.textAlign = 'left';
@@ -177,4 +177,44 @@ function renderGameFrame(ctx, canvasWidth, canvasHeight, frame, options) {
         ctx.fillText(opts.modeBadge, Math.round(14 * dpr), Math.round(14 * dpr));
         ctx.restore();
     }
+
+    // Optional live button-press visualizer (Replay, AI Demo, & Saved Input Playback)
+    if (typeof opts.inputMask === 'number') {
+        var vizY = opts.inputBottom
+            ? (canvasHeight - Math.round(30 * dpr))
+            : (opts.modeBadge ? Math.round(32 * dpr) : Math.round(12 * dpr));
+        drawVfInputVisualizer(ctx, opts.inputMask, dpr, vizY);
+    }
+}
+
+function drawVfInputVisualizer(ctx, mask, dpr, topY) {
+    var btns = [
+        { label: '◀',    bit: INPUT_LEFT,   onColor: '#0ff' },
+        { label: '▲',    bit: INPUT_THRUST, onColor: '#f0f' },
+        { label: '▶',    bit: INPUT_RIGHT,  onColor: '#0ff' },
+        { label: 'FIRE', bit: INPUT_SHOOT,  onColor: '#ff0' }
+    ];
+    ctx.save();
+    var h = Math.round(18 * dpr);
+    var gap = Math.round(4 * dpr);
+    var x = Math.round(12 * dpr);
+    var fontSz = Math.max(9, Math.round(10 * dpr));
+    ctx.font = 'bold ' + fontSz + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (var i = 0; i < btns.length; i++) {
+        var b = btns[i];
+        var w = Math.round((b.label.length === 1 ? 22 : 40) * dpr);
+        var active = (mask & b.bit) !== 0;
+        ctx.fillStyle = active ? b.onColor : 'rgba(0, 12, 16, 0.72)';
+        ctx.fillRect(x, topY, w, h);
+        ctx.strokeStyle = active ? '#fff' : 'rgba(0, 255, 255, 0.45)';
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeRect(x, topY, w, h);
+        ctx.fillStyle = active ? '#000' : 'rgba(0, 255, 255, 0.55)';
+        ctx.fillText(b.label, x + w * 0.5, topY + h * 0.52);
+        x += w + gap;
+    }
+    ctx.restore();
 }
