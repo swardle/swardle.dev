@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0xd7e59e8f'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0x85afbace'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0x94543c97'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0xe7be9a22'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -409,21 +409,26 @@ function runKungFuTestSuite() {
 
     // 3e. All 5 Playable Fighters Live Streak Skills (5-Hit Tier 1 & 10-Hit Tier 2)
     runCase('All 5 playable fighters trigger unique Tier 1 (5+) & Tier 2 (10+) streak skills', function () {
-        // 1. SHADOW RONIN: 1 autonomous AI clone (5+ hits) -> 2 autonomous AI clones (10+ hits) that fight on their own!
+        // 1. SHADOW RONIN: 1 clone (3+) -> 2 clones (5+) -> 3 clones (10+) + Substitution Jutsu!
         var sShadow = createSimState({ seed: 501, fighterId: 'shadow' });
         sShadow.enemies = [];
-        sShadow.comboCount = 5; sShadow.comboDecayTimer = 150; sShadow.streakTier = 1;
+        sShadow.comboCount = 3; sShadow.comboDecayTimer = 150; sShadow.streakTier = 0;
         sShadow.player.x = 200;
         var shEn = spawnEnemy(sShadow, 'boss', 320, -1);
         shEn.cooldown = 999;
-        // Player stands completely still — autonomous clone should summon & run over to fight the boss on its own!
+        // Player stands completely still — autonomous clone #1 should summon & fight on its own!
         for (var sc1 = 0; sc1 < 55; sc1++) stepSimulation(sShadow, INPUT_NONE);
-        kfAssert(sShadow.clones.length === 1, 'Shadow Ronin Tier 1 should have 1 autonomous clone, got ' + sShadow.clones.length);
+        kfAssert(sShadow.clones.length >= 1, 'Shadow Ronin should summon clone #1 at 3+ hits, got ' + sShadow.clones.length);
         kfAssert(shEn.hp < shEn.maxHp, 'Autonomous Shadow Clone failed to attack enemy on its own');
-        // Upgrade to Tier 2 (10+ hits) -> 2 autonomous Shadow Clones!
+        // Upgrade to 10+ hits -> 3 autonomous Shadow Clones!
         sShadow.comboCount = 10; sShadow.comboDecayTimer = 150; sShadow.streakTier = 2;
         stepSimulation(sShadow, INPUT_NONE);
-        kfAssert(sShadow.clones.length === 2, 'Shadow Ronin Tier 2 should have 2 autonomous clones, got ' + sShadow.clones.length);
+        kfAssert(sShadow.clones.length === 3, 'Shadow Ronin Tier 2 should have 3 autonomous clones, got ' + sShadow.clones.length);
+        // Substitution Jutsu: taking a hit with 2+ clones sacrifices 1 clone instead of losing HP!
+        var hpBeforeSub = sShadow.player.hp;
+        hitPlayer(sShadow, 25, -1, null, false, []);
+        kfAssert(sShadow.player.hp === hpBeforeSub && sShadow.clones.length === 2,
+            'Shadow Ronin Substitution should sacrifice 1 clone and block damage');
 
         // 2. DRAGON FIST: Rising Dragon Uppercut + Meteor Dive Slam (10+)
         var sDragon = createSimState({ seed: 502, fighterId: 'dragon' });
@@ -497,8 +502,23 @@ function runKungFuTestSuite() {
         sGale.comboCount = 5; sGale.comboDecayTimer = 150; sGale.streakTier = 1;
         sGale.player.comboStep = 1; sGale.player.comboWindow = 20;
         stepSimulation(sGale, INPUT_ATTACK); // attack2 -> early Tier-1 Flash-Step Dash!
-        kfAssert(sGale.player.action === 'attack2' && sGale.player.invulnTimer >= 7 && sGale.player.vx > 10,
+        kfAssert(sGale.player.action === 'attack2' && sGale.player.invulnTimer >= 3 && sGale.player.vx > 10,
             'Phantom Gale Tier 1 (5+ hits) attack2 should trigger Flash-Step Dash');
+        kfAssert(sGale.player.maxHp === 175, 'Phantom Gale glass-cannon maxHp should be 175');
+
+        // 6. Active-Zone Enemy Softlock Guard: retreating knife ninja stays inside locked zone!
+        var sZone = createSimState({ seed: 506, fighterId: 'shadow' });
+        sZone.enemies = [];
+        sZone.zoneActive = true;
+        sZone.zoneLockMinX = 400;
+        sZone.zoneLockMaxX = 1200;
+        sZone.cameraX = 400;
+        sZone.player.x = 500;
+        var zNinja = spawnEnemy(sZone, 'knife', 440, 1);
+        zNinja.enteredZone = true;
+        for (var zn = 0; zn < 45; zn++) stepSimulation(sZone, INPUT_NONE);
+        kfAssert(zNinja.x >= sZone.zoneLockMinX + 19 && zNinja.x <= sZone.zoneLockMaxX - 19,
+            'Knife ninja escaped locked zone (x=' + zNinja.x + ')');
         // Tier 2 (10+ hits) -> Pinball Super-Bowling wall ricochet!
         sGale.comboCount = 10; sGale.comboDecayTimer = 150; sGale.streakTier = 2;
         sGale.player.x = 680; sGale.player.action = 'idle'; sGale.player.actionTick = 0;

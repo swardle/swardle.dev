@@ -76,6 +76,8 @@ function hashSimState(state) {
         h = fnv1aMixUint32(h, p.comboStep);
         h = fnv1aMixUint32(h, p.turnWindow || 0);
         h = fnv1aMixUint32(h, p.spinCooldown || 0);
+        h = fnv1aMixUint32(h, p.deflectHealCooldown || 0);
+        h = fnv1aMixUint32(h, p.subCooldown || 0);
         h = fnv1aMixUint32(h, p.parryCounterTimer);
         h = fnv1aMixUint32(h, p.attackHeld ? 1 : 0);
         h = fnv1aMixUint32(h, p.attackChargeTicks);

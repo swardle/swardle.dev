@@ -563,36 +563,81 @@ function drawFighterSilhouette(ctx, opts) {
         fElbowX = -24; fElbowY = -6; bElbowX = -38; bElbowY = -6;
     }
 
+    var fStyle = opts.fighterStyle || null;
+
+    // Behind-body fighter props (billowing cape, back-strapped katana, flared skirt)
+    if (fStyle === 'gale') {
+        // Phantom Gale: Billowing violet wind-phantom cape streaming behind shoulders!
+        var capeWave = Math.sin(phase * 2.1) * 7;
+        ctx.fillStyle = 'rgba(130, 52, 210, 0.86)';
+        ctx.strokeStyle = '#e2a8ff';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(shoulderX - 6, shoulderY + 1);
+        ctx.quadraticCurveTo(shoulderX - 28, hipY - 8 + capeWave, shoulderX - 46, hipY + 16 - capeWave * 0.6);
+        ctx.lineTo(shoulderX - 32, hipY + 24 + capeWave * 0.4);
+        ctx.quadraticCurveTo(shoulderX - 18, hipY + 6, shoulderX - 10, hipY + 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    } else if (fStyle === 'shadow') {
+        // Shadow Ronin: Shinobi katana strapped diagonally across the back!
+        ctx.strokeStyle = '#241c1c';
+        ctx.lineWidth = 4.2;
+        ctx.beginPath();
+        ctx.moveTo(shoulderX - 19, shoulderY - 12);
+        ctx.lineTo(hipX + 14, hipY + 14);
+        ctx.stroke();
+        // Crimson hilt wrap & silver tsuba guard sticking up behind shoulder
+        ctx.strokeStyle = '#e62e25';
+        ctx.lineWidth = 3.6;
+        ctx.beginPath();
+        ctx.moveTo(shoulderX - 23, shoulderY - 16);
+        ctx.lineTo(shoulderX - 14, shoulderY - 7);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffd24c';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(shoulderX - 17, shoulderY - 4);
+        ctx.lineTo(shoulderX - 10, shoulderY - 11);
+        ctx.stroke();
+    }
+
     // Optional subtle rim-glow for player readability in crowds
     if (rim) {
         ctx.shadowColor = rim;
         ctx.shadowBlur = 7;
     }
 
-    // Legs (ink silhouette)
+    // Legs (ink silhouette; Dragon Fist has broader brawler stance)
+    var legW = fStyle === 'dragon' ? 9.5 : (fStyle === 'lotus' ? 7.0 : 8.0);
     ctx.strokeStyle = ink;
-    drawLimb(ctx, hipX, hipY, lKneeX, lKneeY, 8);
-    drawLimb(ctx, lKneeX, lKneeY, lFootX, lFootY, 6.5);
-    drawLimb(ctx, hipX, hipY, rKneeX, rKneeY, 8);
-    drawLimb(ctx, rKneeX, rKneeY, rFootX, rFootY, 6.5);
+    drawLimb(ctx, hipX, hipY, lKneeX, lKneeY, legW);
+    drawLimb(ctx, lKneeX, lKneeY, lFootX, lFootY, legW - 1.5);
+    drawLimb(ctx, hipX, hipY, rKneeX, rKneeY, legW);
+    drawLimb(ctx, rKneeX, rKneeY, rFootX, rFootY, legW - 1.5);
 
-    // Martial Arts Gi / Robe Torso & Flared Skirt
+    // Martial Arts Gi / Robe Torso & Fighter-Specific Silhouette
+    var shHalf = fStyle === 'dragon' ? 13 : (fStyle === 'lotus' ? 8.5 : 10);
+    var hipHalf = fStyle === 'lotus' ? 16 : (fStyle === 'thunder' ? 15 : (fStyle === 'dragon' ? 14 : 12.5));
+    var skirtDrop = (fStyle === 'thunder' || fStyle === 'lotus') ? 17 : 9;
     ctx.fillStyle = ink;
     ctx.beginPath();
-    ctx.moveTo(shoulderX - 10, shoulderY);
-    ctx.lineTo(shoulderX + 10, shoulderY);
-    ctx.lineTo(hipX + 12, hipY + 9);
-    ctx.lineTo(hipX - 13, hipY + 9);
+    ctx.moveTo(shoulderX - shHalf, shoulderY);
+    ctx.lineTo(shoulderX + shHalf, shoulderY);
+    ctx.lineTo(hipX + hipHalf, hipY + skirtDrop);
+    ctx.lineTo(hipX - hipHalf - 1, hipY + skirtDrop);
     ctx.closePath();
     ctx.fill();
 
     // Back Arm
-    drawLimb(ctx, shoulderX - 3, shoulderY + 2, bElbowX, bElbowY, 6.5);
-    drawLimb(ctx, bElbowX, bElbowY, bHandX, bHandY, 5.5);
+    var armW = fStyle === 'dragon' ? 8.0 : (fStyle === 'lotus' ? 5.6 : 6.6);
+    drawLimb(ctx, shoulderX - 3, shoulderY + 2, bElbowX, bElbowY, armW);
+    drawLimb(ctx, bElbowX, bElbowY, bHandX, bHandY, armW - 1.0);
 
     // Front Arm
-    drawLimb(ctx, shoulderX + 3, shoulderY + 2, fElbowX, fElbowY, 6.8);
-    drawLimb(ctx, fElbowX, fElbowY, fHandX, fHandY, 5.8);
+    drawLimb(ctx, shoulderX + 3, shoulderY + 2, fElbowX, fElbowY, armW + 0.3);
+    drawLimb(ctx, fElbowX, fElbowY, fHandX, fHandY, armW - 0.8);
 
     // Head
     ctx.fillStyle = ink;
@@ -600,10 +645,174 @@ function drawFighterSilhouette(ctx, opts) {
     ctx.arc(headX, headY, 9.2, 0, Math.PI * 2);
     ctx.fill();
 
+    // Distinct Hair / Cowl Silhouettes per Fighter!
+    if (fStyle === 'shadow') {
+        // Naruto-style spiky shinobi hair tufts!
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.moveTo(headX - 8, headY - 5);
+        ctx.lineTo(headX - 15, headY - 12);
+        ctx.lineTo(headX - 6, headY - 10);
+        ctx.lineTo(headX - 6, headY - 18);
+        ctx.lineTo(headX + 1, headY - 11);
+        ctx.lineTo(headX + 7, headY - 17);
+        ctx.lineTo(headX + 8, headY - 7);
+        ctx.closePath();
+        ctx.fill();
+    } else if (fStyle === 'dragon') {
+        // Wild flame-swept martial-arts hair crest!
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.moveTo(headX - 7, headY - 6);
+        ctx.lineTo(headX - 13, headY - 16);
+        ctx.lineTo(headX - 2, headY - 13);
+        ctx.lineTo(headX + 3, headY - 20);
+        ctx.lineTo(headX + 8, headY - 9);
+        ctx.closePath();
+        ctx.fill();
+    } else if (fStyle === 'lotus') {
+        // High flowing kunoichi ponytail!
+        var ponyWave = Math.sin(phase * 2.0) * 4;
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 4.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(headX - 6, headY - 8);
+        ctx.quadraticCurveTo(headX - 19, headY - 14 + ponyWave, headX - 28, headY - 2 - ponyWave * 0.5);
+        ctx.stroke();
+        // Emerald ponytail ribbon tie
+        ctx.fillStyle = '#36e68a';
+        ctx.beginPath();
+        ctx.arc(headX - 7, headY - 8, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (fStyle === 'gale') {
+        // Swept phantom hood crest
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.moveTo(headX - 9, headY - 2);
+        ctx.lineTo(headX - 16, headY - 10);
+        ctx.lineTo(headX + 4, headY - 10);
+        ctx.closePath();
+        ctx.fill();
+    }
+
     ctx.shadowBlur = 0;
 
+    // Distinct Fighter Costumes, Gear & Signature Props!
+    if (fStyle === 'shadow') {
+        // Crimson ninja waist sash + silver shinobi forehead plate on headband
+        ctx.strokeStyle = '#e62e25';
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(hipX - 11, hipY + 1);
+        ctx.lineTo(hipX + 11, hipY + 1);
+        ctx.stroke();
+        ctx.fillStyle = '#d8e0e8';
+        ctx.fillRect(headX + 1, headY - 4.5, 6, 3.5);
+    } else if (fStyle === 'dragon') {
+        // Glowing golden dragon-wrapped fist gauntlets + golden martial belt sash!
+        ctx.fillStyle = '#ff9e1b';
+        ctx.strokeStyle = '#ffd24c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(fHandX, fHandY, 5.4, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(bHandX, bHandY, 4.8, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+
+        ctx.strokeStyle = '#ff9e1b';
+        ctx.lineWidth = 3.8;
+        ctx.beginPath();
+        ctx.moveTo(hipX - 13, hipY + 1);
+        ctx.lineTo(hipX + 13, hipY + 1);
+        ctx.stroke();
+        // Golden belt tassel
+        var beltWag = Math.sin(phase * 1.8) * 3;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(hipX + 5, hipY + 2);
+        ctx.lineTo(hipX + 9 + beltWag, hipY + 18);
+        ctx.stroke();
+    } else if (fStyle === 'thunder') {
+        // Iconic wide Raiden-style conical bamboo Kasa hat with electric cyan rim!
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.moveTo(headX - 27, headY - 3);
+        ctx.lineTo(headX, headY - 21);
+        ctx.lineTo(headX + 27, headY - 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#38d9ff';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(headX - 27, headY - 3);
+        ctx.lineTo(headX + 27, headY - 3);
+        ctx.stroke();
+
+        // Giant glowing storm prayer-bead necklace (juzu) across chest!
+        ctx.fillStyle = '#8ef4ff';
+        ctx.strokeStyle = '#0d2633';
+        ctx.lineWidth = 1;
+        for (var pb = 0; pb < 6; pb++) {
+            var pt = pb / 5;
+            var pbx = shoulderX - 8 + pt * 17;
+            var pby = shoulderY + 4 + Math.sin(pt * Math.PI) * 11;
+            ctx.beginPath();
+            ctx.arc(pbx, pby, 2.7, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+        }
+        // Electric robe hem trim
+        ctx.strokeStyle = '#38d9ff';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(hipX - 15, hipY + 16);
+        ctx.lineTo(hipX + 14, hipY + 16);
+        ctx.stroke();
+    } else if (fStyle === 'lotus') {
+        // Dual glowing emerald jade twin-daggers held in BOTH hands + lotus hem!
+        ctx.strokeStyle = '#7dffba';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.moveTo(fHandX, fHandY);
+        ctx.lineTo(fHandX + 18, fHandY - 5);
+        ctx.moveTo(bHandX, bHandY);
+        ctx.lineTo(bHandX - 15, bHandY + 4);
+        ctx.stroke();
+        // Flowing emerald neck scarf
+        var scWave = Math.sin(phase * 1.9) * 4;
+        ctx.strokeStyle = '#36e68a';
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.moveTo(shoulderX - 4, shoulderY + 1);
+        ctx.quadraticCurveTo(shoulderX - 18, shoulderY + 6 + scWave, shoulderX - 30, shoulderY + 14 - scWave * 0.5);
+        ctx.stroke();
+        // Jade hakama trim
+        ctx.strokeStyle = '#36e68a';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(hipX - 16, hipY + 16);
+        ctx.lineTo(hipX + 15, hipY + 16);
+        ctx.stroke();
+    } else if (fStyle === 'gale') {
+        // Glowing violet phantom mask eye-slit + wind wrist-wraps!
+        ctx.fillStyle = '#e2a8ff';
+        ctx.beginPath();
+        ctx.moveTo(headX + 2, headY - 3);
+        ctx.lineTo(headX + 8.5, headY - 4);
+        ctx.lineTo(headX + 7, headY - 1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#c66bff';
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.moveTo(fHandX - 4, fHandY); ctx.lineTo(fHandX + 2, fHandY);
+        ctx.moveTo(bHandX - 4, bHandY); ctx.lineTo(bHandX + 2, bHandY);
+        ctx.stroke();
+    }
+
     // Accessories & Weapons
-    if (opts.headbandColor) {
+    if (opts.headbandColor && fStyle !== 'thunder' && fStyle !== 'gale') {
         // Headband wrap + streaming ink-cloth tails
         ctx.strokeStyle = opts.headbandColor;
         ctx.lineWidth = 3.2;
@@ -791,19 +1000,20 @@ function drawFighterSilhouette(ctx, opts) {
 
 function drawAfterimageClone(ctx, af, tick) {
     var alpha = Math.max(0.10, (af.life / (af.maxLife || 12)) * 0.48);
-    var col = af.color || '#ff5247';
+    var col = af.color || '#c66bff';
     ctx.save();
     ctx.globalAlpha = alpha;
     drawFighterSilhouette(ctx, {
         x: af.x,
         y: af.y,
         facing: af.facing,
-        scale: 1.04,
+        scale: 1.02,
         pose: af.pose || 'attack1',
         phase: tick * 0.16,
         flash: false,
         rimColor: col,
         headbandColor: col,
+        fighterStyle: 'gale',
         actionTick: 6
     });
     ctx.restore();
@@ -822,6 +1032,7 @@ function drawShadowCloneFighter(ctx, cl, tick) {
         flash: false,
         rimColor: '#ff5247',
         headbandColor: '#ff5247',
+        fighterStyle: 'shadow',
         actionTick: cl.actionTick || 0,
         streakTier: 1,
         streakAuraColor: 'rgba(255, 82, 71, 0.7)'
@@ -872,16 +1083,19 @@ function drawPlayerFighter(ctx, p, tick, streakTier) {
     else if (tier >= 2) rimColor = fighter.accent;
     else if (tier >= 1) rimColor = fighter.headband;
 
+    var fScale = fighter.id === 'dragon' ? 1.13 : (fighter.id === 'lotus' ? 0.99 : 1.04);
+
     drawFighterSilhouette(ctx, {
         x: p.x,
         y: p.y,
         facing: p.facing,
-        scale: 1.04,
+        scale: fScale,
         pose: pose,
         phase: (pose === 'run') ? p.walkCycle : (tick * 0.12),
         flash: p.flashTimer > 0,
         rimColor: rimColor,
         headbandColor: fighter.headband,
+        fighterStyle: fighter.id,
         parryAura: parryAura,
         chargeTicks: chargeTicks,
         actionTick: p.actionTick || 0,
