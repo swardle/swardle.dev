@@ -33,12 +33,12 @@ var FIGHTERS = [
         id: 'shadow',
         name: 'SHADOW RONIN',
         shortName: 'RONIN',
-        tag: 'Clone + Wave',
+        tag: '1→2 AI Clones',
         headband: '#e62e25',
         accent: '#ff5247',
         tier1Name: 'SHADOW CLONE',
-        tier2Name: 'CRESCENT WAVE',
-        desc: '5+ Hits: Ink Clone Afterimage • 10+ Hits: Piercing Slash Waves'
+        tier2Name: 'TWIN CLONES',
+        desc: '5+ Hits: 1 AI Shadow Clone • 10+ Hits: 2 AI Shadow Clones'
     },
     {
         id: 'dragon',
@@ -77,12 +77,12 @@ var FIGHTERS = [
         id: 'gale',
         name: 'PHANTOM GALE',
         shortName: 'GALE',
-        tag: 'Pinball + Dash',
+        tag: 'Fast + Flash Step',
         headband: '#c66bff',
         accent: '#e2a8ff',
-        tier1Name: 'PINBALL LAUNCH',
-        tier2Name: 'FLASH-STEP DASH',
-        desc: '5+ Hits: Super-Bounce Bowling • 10+ Hits: Invuln Dash-Through Finisher'
+        tier1Name: 'FLASH STEP',
+        tier2Name: 'PINBALL BLITZ',
+        desc: 'Fast Move • 3+ Hits: Flash-Step • 5+: Combo Flash • 10+: Pinball Blitz'
     }
 ];
 
@@ -218,6 +218,7 @@ function createSimState(setup) {
         slashes: [],
         callouts: [],
         afterimages: [],
+        clones: [],
         bolts: []
     };
 
@@ -300,6 +301,7 @@ function cloneSimState(state) {
         slashes: cloneArrayOfFlatObjects(state.slashes),
         callouts: cloneArrayOfFlatObjects(state.callouts),
         afterimages: cloneArrayOfFlatObjects(state.afterimages || []),
+        clones: cloneArrayOfFlatObjects(state.clones || []),
         bolts: cloneArrayOfFlatObjects(state.bolts || [])
     };
 }
@@ -561,6 +563,7 @@ function advanceToNextFloor(state, soundEvents) {
     state.traps = [];
     state.slashes = [];
     state.afterimages = [];
+    state.clones = [];
     state.bolts = [];
 
     var p = state.player;
@@ -757,6 +760,9 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
     var dur = spec.dur;
     if (fId === 'dragon' && tier >= 1 && moveName !== 'divekick') {
         dur = Math.max(10, Math.round(dur * 0.80));
+    } else if (fId === 'gale' && moveName !== 'spin') {
+        // Phantom Gale: naturally quicker, snappier strikes right from 0 hits!
+        dur = Math.max(10, Math.round(dur * (tier >= 1 ? 0.84 : 0.90)));
     }
 
     p.action = moveName;
@@ -764,6 +770,11 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
     p.actionDuration = dur;
     p.moveHitConnected = false;
     p.swingId = (p.swingId + 1) >>> 0;
+
+    var isGaleFlash = (fId === 'gale') && (
+        (tier >= 1 && (moveName === 'attack2' || moveName === 'attack3' || moveName === 'counter')) ||
+        (state.comboCount >= 3 && (moveName === 'attack3' || moveName === 'counter'))
+    );
 
     if (moveName === 'dragon_upper') {
         p.vx = p.facing * spec.lunge;
@@ -780,14 +791,25 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
         p.vx = 0;
         spawnRingEffect(state, p.x, p.y - 44, tier >= 1 ? fighter.accent : '#ffb830', 84);
         spawnParticles(state, p.x, p.y - 44, 12, tier >= 1 ? fighter.accent : '#ffd24c', 2.2, 6.2, 0.6);
-    } else if (fId === 'gale' && tier >= 2 && (moveName === 'attack3' || moveName === 'counter')) {
-        // Phantom Gale Tier 2: Invulnerable Flash-Step Dash-Through!
-        p.invulnTimer = Math.max(p.invulnTimer, 12);
-        p.vx = p.facing * 15.5;
-        spawnRingEffect(state, p.x, p.y - 46, '#c66bff', 64);
-        spawnParticles(state, p.x, p.y - 46, 14, '#c66bff', 2.2, 6.8, 0.6);
-        spawnCallout(state, p.x, p.y - 88, 'FLASH STEP!', '#e2a8ff');
+    } else if (isGaleFlash) {
+        // Phantom Gale Early & Combo Flash-Step Dash-Through!
+        var isComboMid = (moveName === 'attack2');
+        var dashSpd = isComboMid ? 12.2 : (tier >= 2 ? 17.0 : 15.2);
+        var dashInvuln = isComboMid ? 8 : (tier >= 2 ? 14 : 11);
+        p.invulnTimer = Math.max(p.invulnTimer, dashInvuln);
+        p.vx = p.facing * dashSpd;
+        spawnRingEffect(state, p.x, p.y - 46, '#c66bff', isComboMid ? 48 : 66);
+        spawnParticles(state, p.x, p.y - 46, isComboMid ? 9 : 14, '#c66bff', 2.0, 6.6, 0.6);
+        if (!isComboMid) {
+            spawnCallout(state, p.x, p.y - 88, 'FLASH STEP!', '#e2a8ff');
+        }
         soundEvents.push('dash');
+        if (state.afterimages.length >= 8) state.afterimages.shift();
+        state.afterimages.push({
+            id: allocEntityId(state),
+            x: p.x, y: p.y, facing: p.facing, pose: moveName,
+            color: '#c66bff', life: 12, maxLife: 12
+        });
     } else {
         p.vx = p.facing * spec.lunge;
         if (moveName === 'airkick') {
@@ -798,33 +820,6 @@ function startPlayerAttack(state, p, soundEvents, forceMove) {
     // Dragon Fist Tier 1+: fiery ink embers on every swing
     if (fId === 'dragon' && tier >= 1) {
         spawnParticles(state, p.x + p.facing * 26, p.y - 46, 6, '#ff9e1b', 1.4, 4.8, 0.8);
-    }
-
-    // Shadow Ronin Tier 1+: spawn trailing Shadow Clone Afterimage that repeats the strike!
-    if (fId === 'shadow' && tier >= 1) {
-        if (state.afterimages.length >= 6) state.afterimages.shift();
-        state.afterimages.push({
-            id: allocEntityId(state),
-            x: p.x - p.facing * 12,
-            y: p.y,
-            facing: p.facing,
-            pose: moveName,
-            dmg: Math.max(6, Math.round(spec.dmg * 0.55)),
-            reach: spec.reach + 14,
-            kx: spec.kx * 0.65,
-            ky: spec.ky * 0.7,
-            omni: !!spec.omni,
-            delay: 5,
-            triggered: false,
-            swingId: allocEntityId(state),
-            life: 16,
-            maxLife: 16
-        });
-    }
-
-    // Shadow Ronin Tier 2: piercing Crescent Ink Wave on finishers & air kick!
-    if (fId === 'shadow' && tier >= 2 && (moveName === 'attack3' || moveName === 'airkick' || moveName === 'counter')) {
-        spawnCrescentWave(state, p, '#ff5247');
     }
 
     // Lotus Blade Tier 2: Jade Blade Fan on finishers & 360° spin!
@@ -1148,8 +1143,12 @@ function tryDeflectProjectileWithSwing(state, p, pr, prevX, soundEvents) {
         pr.damage = 30;
         pr.life = 115;
 
-        p.parryCounterTimer = COUNTER_WINDOW;
-        p.hp = Math.min(p.maxHp, p.hp + 8);
+        if (!p.isClone) {
+            p.parryCounterTimer = COUNTER_WINDOW;
+            p.hp = Math.min(p.maxHp, p.hp + 8);
+        } else if (state.player && state.player.alive) {
+            state.player.hp = Math.min(state.player.maxHp, state.player.hp + 4);
+        }
         state.score += 120;
         if (state.hitstopTimer < 3) state.hitstopTimer = 3;
         state.screenShake = Math.max(state.screenShake, 4.8);
@@ -1331,6 +1330,279 @@ function tryDeflectTrapWithSwing(state, p, tr, prevX, prevY, soundEvents) {
     return false;
 }
 
+function spawnShadowClone(state, slotIdx, minX, maxX, soundEvents) {
+    var p = state.player;
+    var offset = (slotIdx === 0) ? (-p.facing * 42) : (p.facing * 42);
+    var cx = p.x + offset;
+    if (cx < minX) cx = minX;
+    if (cx > maxX) cx = maxX;
+    var cl = {
+        id: allocEntityId(state),
+        isClone: true,
+        alive: true,
+        slotIndex: slotIdx,
+        x: cx,
+        y: GROUND_Y,
+        vx: 0,
+        vy: 0,
+        facing: p.facing,
+        onGround: true,
+        action: 'idle',
+        actionTick: 0,
+        actionDuration: 0,
+        swingId: 0,
+        comboStep: 0,
+        comboWindow: 0,
+        attackCooldown: 4,
+        jumpCooldown: 12,
+        walkCycle: slotIdx * 1.8
+    };
+    state.clones.push(cl);
+    // Naruto-style white/ink smoke puff!
+    spawnRingEffect(state, cx, GROUND_Y - 42, '#f2ede2', 56);
+    spawnParticles(state, cx, GROUND_Y - 42, 12, '#f2ede2', 1.4, 4.8, 1.2);
+    spawnParticles(state, cx, GROUND_Y - 42, 8, '#111111', 1.2, 4.0, 0.8);
+    spawnCallout(state, cx, GROUND_Y - 84, slotIdx === 0 ? 'CLONE!' : 'TWIN CLONE!', '#ff5247');
+    soundEvents.push('swing');
+    return cl;
+}
+
+function startCloneAttack(state, cl, soundEvents) {
+    var moveName;
+    if (!cl.onGround) {
+        moveName = 'airkick';
+        cl.comboStep = 0;
+        cl.comboWindow = 0;
+    } else if (cl.comboWindow > 0 && cl.comboStep === 1) {
+        moveName = 'attack2';
+        cl.comboStep = 2;
+        cl.comboWindow = 28;
+    } else if (cl.comboWindow > 0 && cl.comboStep === 2) {
+        moveName = 'attack3';
+        cl.comboStep = 0;
+        cl.comboWindow = 0;
+    } else {
+        moveName = 'attack1';
+        cl.comboStep = 1;
+        cl.comboWindow = 28;
+    }
+
+    var spec = PLAYER_MOVES[moveName];
+    cl.action = moveName;
+    cl.actionTick = 0;
+    cl.actionDuration = spec.dur;
+    cl.swingId = (cl.swingId + 1) >>> 0;
+    cl.vx = cl.facing * spec.lunge;
+    if (moveName === 'airkick') {
+        cl.vy = Math.min(cl.vy, 1.5);
+    }
+    var slashStyle = moveName === 'attack1' ? 'jab'
+        : moveName === 'attack2' ? 'kick'
+        : moveName === 'attack3' ? 'upper'
+        : 'air';
+    spawnSlashArc(state, cl.x + cl.facing * 22, cl.y - 46, cl.facing, slashStyle, '#ff5247');
+    soundEvents.push('swing');
+}
+
+function updateShadowClones(state, minX, maxX, soundEvents) {
+    var p = state.player;
+    var tier = getStreakTier(state);
+    var desired = (p && p.alive && (p.fighterId || 'shadow') === 'shadow')
+        ? (tier >= 2 ? 2 : (tier >= 1 ? 1 : 0))
+        : 0;
+
+    if (!state.clones) state.clones = [];
+
+    // Pop excess clones in a smoke puff when streak drops
+    while (state.clones.length > desired) {
+        var popped = state.clones.pop();
+        spawnParticles(state, popped.x, popped.y - 42, 10, '#f2ede2', 1.2, 4.4, 1.0);
+        spawnParticles(state, popped.x, popped.y - 42, 6, '#111111', 1.0, 3.6, 0.8);
+    }
+
+    // Summon missing clones (1 at Tier 1, 2 at Tier 2)
+    while (state.clones.length < desired) {
+        spawnShadowClone(state, state.clones.length, minX, maxX, soundEvents);
+    }
+
+    for (var ci = 0; ci < state.clones.length; ci++) {
+        var cl = state.clones[ci];
+        if (cl.comboWindow > 0) cl.comboWindow -= 1;
+        if (cl.attackCooldown > 0) cl.attackCooldown -= 1;
+        if (cl.jumpCooldown > 0) cl.jumpCooldown -= 1;
+
+        var isAtk = (cl.action === 'attack1' || cl.action === 'attack2' ||
+                     cl.action === 'attack3' || cl.action === 'airkick');
+
+        if (isAtk) {
+            cl.actionTick += 1;
+            var spec = PLAYER_MOVES[cl.action];
+            if (cl.onGround) cl.vx *= 0.82;
+
+            if (cl.actionTick >= spec.start && cl.actionTick <= spec.end) {
+                var cCenterX = cl.x + cl.facing * (spec.reach * 0.55);
+                var cHalfW = spec.reach * 0.55;
+                var launchLiving = (cl.action === 'attack3' || cl.action === 'airkick');
+                for (var ei = state.enemies.length - 1; ei >= 0; ei--) {
+                    var en = state.enemies[ei];
+                    if (en.lastHitSwingId === cl.swingId) continue;
+                    var enTop = en.y - 78 * en.scale;
+                    if (Math.abs(en.x - cCenterX) <= cHalfW + 20 * en.scale &&
+                        en.y >= cl.y - 95 && enTop <= cl.y + 12) {
+                        en.lastHitSwingId = cl.swingId;
+                        var cDmg = Math.max(8, Math.round(spec.dmg * 0.65));
+                        // stopTicks=0 so autonomous clone hits never stutter the player's own controls!
+                        var dead = damageEnemy(
+                            state, en, cDmg,
+                            cl.facing * spec.kx * 0.85, spec.ky * 0.85, 0,
+                            false, soundEvents, launchLiving
+                        );
+                        if (dead) state.enemies.splice(ei, 1);
+                    }
+                }
+            }
+
+            if (cl.actionTick >= cl.actionDuration) {
+                cl.action = cl.onGround ? 'idle' : 'jump';
+                cl.actionTick = 0;
+            }
+        } else {
+            // Autonomous Clone AI: deflect nearby stars/barrels, flank enemies, or run alongside player!
+            var acted = false;
+
+            // 1. Deflect approaching ninja stars & rolling barrels!
+            if (cl.attackCooldown === 0) {
+                for (var pi = 0; pi < state.projectiles.length; pi++) {
+                    var pr = state.projectiles[pi];
+                    if (pr.owner !== 'enemy') continue;
+                    var pdx = pr.x - cl.x;
+                    if (Math.abs(pdx) < 76 && ((pdx > 0 && pr.vx < 0) || (pdx < 0 && pr.vx > 0))) {
+                        cl.facing = pdx >= 0 ? 1 : -1;
+                        cl.attackCooldown = 8;
+                        startCloneAttack(state, cl, soundEvents);
+                        acted = true;
+                        break;
+                    }
+                }
+            }
+            if (!acted && cl.attackCooldown === 0) {
+                for (var ti = 0; ti < state.traps.length; ti++) {
+                    var tr = state.traps[ti];
+                    if (tr.owner === 'player' || tr.kind !== 'barrel') continue;
+                    var bdx = tr.x - cl.x;
+                    if (Math.abs(bdx) < 78 && ((bdx > 0 && tr.vx < 0) || (bdx < 0 && tr.vx > 0))) {
+                        cl.facing = bdx >= 0 ? 1 : -1;
+                        cl.attackCooldown = 10;
+                        startCloneAttack(state, cl, soundEvents);
+                        acted = true;
+                        break;
+                    }
+                }
+            }
+
+            // 2. Pick target enemy (Clone 0 -> nearest, Clone 1 -> 2nd nearest or flank opposite side!)
+            if (!acted) {
+                var sorted = [];
+                for (var eIdx = 0; eIdx < state.enemies.length; eIdx++) {
+                    var cand = state.enemies[eIdx];
+                    sorted.push({ enemy: cand, dist: Math.abs(cand.x - cl.x) });
+                }
+                sorted.sort(function (a, b) { return a.dist - b.dist; });
+
+                var target = null;
+                var goalX = p.x - p.facing * (44 + cl.slotIndex * 34);
+                if (sorted.length > 0) {
+                    if (cl.slotIndex === 1 && sorted.length > 1) {
+                        target = sorted[1].enemy;
+                        goalX = target.x;
+                    } else if (cl.slotIndex === 1 && sorted.length === 1) {
+                        target = sorted[0].enemy;
+                        // Flank opposite side from player to sandwich the enemy/boss!
+                        var flankSide = (p.x <= target.x) ? 1 : -1;
+                        goalX = target.x + flankSide * 48;
+                    } else {
+                        target = sorted[0].enemy;
+                        goalX = target.x;
+                    }
+                }
+
+                if (target) {
+                    var tdx = target.x - cl.x;
+                    var absTdx = Math.abs(tdx);
+                    cl.facing = tdx >= 0 ? 1 : -1;
+
+                    if (!cl.onGround && absTdx < 105 && cl.attackCooldown === 0) {
+                        cl.attackCooldown = 14;
+                        startCloneAttack(state, cl, soundEvents);
+                    } else if (absTdx <= 76 && cl.onGround) {
+                        cl.vx *= 0.7;
+                        if (cl.attackCooldown === 0) {
+                            cl.attackCooldown = (cl.comboStep === 2) ? 18 : 9;
+                            startCloneAttack(state, cl, soundEvents);
+                        } else {
+                            cl.action = 'idle';
+                        }
+                    } else if (cl.onGround && absTdx > 130 && absTdx < 210 && cl.jumpCooldown === 0 && ((state.tick + cl.slotIndex * 19) % 47 === 0)) {
+                        cl.vy = JUMP_VEL;
+                        cl.vx = cl.facing * PLAYER_AIR_SPEED * 1.05;
+                        cl.onGround = false;
+                        cl.action = 'jump';
+                        cl.actionTick = 0;
+                        cl.jumpCooldown = 48;
+                        spawnParticles(state, cl.x, GROUND_Y, 4, '#332b24', 0.8, 2.2, 0.8);
+                    } else {
+                        var gdx = goalX - cl.x;
+                        var cSpd = cl.onGround ? PLAYER_SPEED * 1.06 : PLAYER_AIR_SPEED;
+                        if (Math.abs(gdx) > 10) {
+                            cl.facing = gdx >= 0 ? 1 : -1;
+                            cl.vx = cl.facing * cSpd;
+                            if (cl.onGround) {
+                                cl.action = 'run';
+                                cl.walkCycle += 0.26;
+                            }
+                        } else {
+                            cl.vx *= 0.68;
+                            if (cl.onGround) cl.action = 'idle';
+                        }
+                    }
+                } else {
+                    // No enemies: sprint in formation behind Shadow Ronin!
+                    var fdx = goalX - cl.x;
+                    if (Math.abs(fdx) > 14) {
+                        cl.facing = fdx >= 0 ? 1 : -1;
+                        cl.vx = cl.facing * PLAYER_SPEED * 1.04;
+                        if (cl.onGround) {
+                            cl.action = 'run';
+                            cl.walkCycle += 0.25;
+                        }
+                    } else {
+                        cl.facing = p.facing;
+                        cl.vx *= 0.65;
+                        if (Math.abs(cl.vx) < 0.15) cl.vx = 0;
+                        if (cl.onGround) cl.action = 'idle';
+                    }
+                }
+            }
+        }
+
+        // Integrate Clone Physics & Clamp to Arena
+        cl.x += cl.vx;
+        cl.vy += GRAVITY;
+        cl.y += cl.vy;
+        if (cl.y >= GROUND_Y) {
+            if (!cl.onGround && cl.action === 'airkick') {
+                cl.action = 'idle';
+                cl.actionTick = 0;
+            }
+            cl.y = GROUND_Y;
+            cl.vy = 0;
+            cl.onGround = true;
+        }
+        if (cl.x < minX) cl.x = minX;
+        if (cl.x > maxX) cl.x = maxX;
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Main Fixed-Timestep Simulation Step (60 Hz)
 // ----------------------------------------------------------------------------
@@ -1459,7 +1731,19 @@ function stepSimulation(state, inputMask) {
             ? Math.max(2, spec.start - 1) : spec.start;
         var activeEnd = spec.end;
         if (p.onGround) {
-            p.vx *= (fId === 'gale' && tier >= 2 && (p.action === 'attack3' || p.action === 'counter')) ? 0.90 : 0.82;
+            var isGaleFlashDashing = (fId === 'gale') && (
+                (tier >= 1 && (p.action === 'attack2' || p.action === 'attack3' || p.action === 'counter')) ||
+                (state.comboCount >= 3 && (p.action === 'attack3' || p.action === 'counter'))
+            );
+            p.vx *= isGaleFlashDashing ? 0.90 : 0.82;
+            if (isGaleFlashDashing && p.actionTick % 3 === 0) {
+                if (state.afterimages.length >= 8) state.afterimages.shift();
+                state.afterimages.push({
+                    id: allocEntityId(state),
+                    x: p.x, y: p.y, facing: p.facing, pose: p.action,
+                    color: '#c66bff', life: 10, maxLife: 10
+                });
+            }
         }
 
         // Active hitbox window
@@ -1467,7 +1751,7 @@ function stepSimulation(state, inputMask) {
             var isOmni = !!spec.omni;
             var effReach = spec.reach + ((fId === 'dragon' && tier >= 1) ? 16 : 0);
             var effDmg = (fId === 'dragon' && tier >= 1) ? Math.round(spec.dmg * 1.25) : spec.dmg;
-            var effKx = spec.kx * ((fId === 'dragon' && tier >= 1) ? 1.20 : 1.0) * ((fId === 'gale' && tier >= 1) ? 1.25 : 1.0);
+            var effKx = spec.kx * ((fId === 'dragon' && tier >= 1) ? 1.20 : 1.0) * ((fId === 'gale' && tier >= 2) ? 1.25 : 1.0);
             var hitCenterX = isOmni ? p.x : (p.x + p.facing * (effReach * 0.55));
             var hitHalfW = isOmni ? effReach : (effReach * 0.55);
             var hitYMin = (p.action === 'dragon_upper') ? (p.y - 122) : (p.y - 95);
@@ -1475,7 +1759,7 @@ function stepSimulation(state, inputMask) {
 
             var launchLiving = (p.action === 'attack3' || p.action === 'airkick' || p.action === 'counter' ||
                                 p.action === 'dragon_upper' || p.action === 'divekick' || p.action === 'spin' ||
-                                (fId === 'gale' && tier >= 1));
+                                (fId === 'gale' && tier >= 2));
             var struckEnemies = [];
             for (var ei = state.enemies.length - 1; ei >= 0; ei--) {
                 var en = state.enemies[ei];
@@ -1569,18 +1853,38 @@ function stepSimulation(state, inputMask) {
             p.vx *= 0.72;
             if (Math.abs(p.vx) < 0.12) p.vx = 0;
         } else {
-            var moveSpd = p.onGround ? PLAYER_SPEED : PLAYER_AIR_SPEED;
+            var isGale = (fId === 'gale');
+            var moveSpd = p.onGround
+                ? (isGale ? PLAYER_SPEED * 1.25 : PLAYER_SPEED)
+                : (isGale ? PLAYER_AIR_SPEED * 1.22 : PLAYER_AIR_SPEED);
+            var walkInc = isGale ? 0.30 : 0.24;
             if (left && !right) {
                 p.vx = -moveSpd;
                 if (p.onGround) {
                     p.action = 'run';
-                    p.walkCycle += 0.24;
+                    p.walkCycle += walkInc;
+                }
+                if (isGale && state.tick % 5 === 0) {
+                    if (state.afterimages.length >= 8) state.afterimages.shift();
+                    state.afterimages.push({
+                        id: allocEntityId(state),
+                        x: p.x, y: p.y, facing: p.facing, pose: p.onGround ? 'run' : 'jump',
+                        color: '#c66bff', life: 8, maxLife: 8
+                    });
                 }
             } else if (right && !left) {
                 p.vx = moveSpd;
                 if (p.onGround) {
                     p.action = 'run';
-                    p.walkCycle += 0.24;
+                    p.walkCycle += walkInc;
+                }
+                if (isGale && state.tick % 5 === 0) {
+                    if (state.afterimages.length >= 8) state.afterimages.shift();
+                    state.afterimages.push({
+                        id: allocEntityId(state),
+                        x: p.x, y: p.y, facing: p.facing, pose: p.onGround ? 'run' : 'jump',
+                        color: '#c66bff', life: 8, maxLife: 8
+                    });
                 }
             } else {
                 p.vx *= p.onGround ? 0.65 : 0.94;
@@ -1639,33 +1943,16 @@ function stepSimulation(state, inputMask) {
     if (p.x < minPlayerX) p.x = minPlayerX;
     if (p.x > maxPlayerX) p.x = maxPlayerX;
 
-    // --- 1b. Shadow Ronin Afterimage Clones (Tier 1+) ---
+    // --- 1b. Cosmetic Motion/Flash-Step Afterimage Trails ---
     for (var aiIdx = state.afterimages.length - 1; aiIdx >= 0; aiIdx--) {
-        var aft = state.afterimages[aiIdx];
-        aft.life -= 1;
-        if (aft.delay > 0) {
-            aft.delay -= 1;
-        } else if (!aft.triggered) {
-            aft.triggered = true;
-            var aCenterX = aft.omni ? aft.x : (aft.x + aft.facing * (aft.reach * 0.55));
-            var aHalfW = aft.omni ? aft.reach : (aft.reach * 0.55);
-            spawnSlashArc(state, aft.omni ? aft.x : (aft.x + aft.facing * 22), aft.y - 46, aft.facing, aft.omni ? 'spin' : 'jab', '#ff5247');
-            for (var aei = state.enemies.length - 1; aei >= 0; aei--) {
-                var aEn = state.enemies[aei];
-                if (aEn.lastHitSwingId === aft.swingId) continue;
-                if (Math.abs(aEn.x - aCenterX) <= aHalfW + 20 * aEn.scale &&
-                    aEn.y >= aft.y - 98 && (aEn.y - 78 * aEn.scale) <= aft.y + 12) {
-                    aEn.lastHitSwingId = aft.swingId;
-                    var aDir = aft.omni ? (aEn.x >= aft.x ? 1 : -1) : aft.facing;
-                    var aDead = damageEnemy(state, aEn, aft.dmg, aDir * aft.kx, aft.ky, 0, false, soundEvents, false);
-                    if (aDead) state.enemies.splice(aei, 1);
-                }
-            }
-        }
-        if (aft.life <= 0) {
+        state.afterimages[aiIdx].life -= 1;
+        if (state.afterimages[aiIdx].life <= 0) {
             state.afterimages.splice(aiIdx, 1);
         }
     }
+
+    // --- 1b2. Shadow Ronin Autonomous AI Shadow Clones (Naruto-style: 1 @ 5+ hits, 2 @ 10+ hits) ---
+    updateShadowClones(state, minPlayerX, maxPlayerX, soundEvents);
 
     // --- 1c. Lotus Blade Orbiting Ink Blades (Tier 1: 2 blades, Tier 2: 3 blades) ---
     var liveTier = getStreakTier(state);
@@ -1950,8 +2237,8 @@ function stepSimulation(state, inputMask) {
             e.onGround = true;
         }
 
-        // Keep enemies inside floor bounds (Phantom Gale Tier 1+ pinball-bounces thrown enemies off screen edges!)
-        var pinballActive = (fId === 'gale' && getStreakTier(state) >= 1 && e.state === 'thrown' && (e.thrownTimer || 0) > 0 && (e.wallBounces || 0) < 2);
+        // Keep enemies inside floor bounds (Phantom Gale Tier 2 pinball-bounces thrown enemies off screen edges!)
+        var pinballActive = (fId === 'gale' && getStreakTier(state) >= 2 && e.state === 'thrown' && (e.thrownTimer || 0) > 0 && (e.wallBounces || 0) < 2);
         var eMinX = pinballActive ? Math.max(22, state.cameraX + 20) : 18;
         var eMaxX = pinballActive ? Math.min(FLOOR_LENGTH - 22, state.cameraX + state.setup.viewWidth - 20) : (FLOOR_LENGTH - 18);
         if (e.x < eMinX) {
@@ -2054,9 +2341,9 @@ function stepSimulation(state, inputMask) {
             }
         }
 
-        // KO'd flying enemy bowling body hits other enemies & barrels (and pinball-bounces for Phantom Gale Tier 1+!)
+        // KO'd flying enemy bowling body hits other enemies & barrels (and pinball-bounces for Phantom Gale Tier 2!)
         if (!removeProj && pr.kind === 'ko_body') {
-            if (fId === 'gale' && getStreakTier(state) >= 1 && (pr.wallBounces || 0) < 2) {
+            if (fId === 'gale' && getStreakTier(state) >= 2 && (pr.wallBounces || 0) < 2) {
                 var kbMinX = state.cameraX + 20;
                 var kbMaxX = state.cameraX + state.setup.viewWidth - 20;
                 if (pr.x < kbMinX && pr.vx < 0) {
@@ -2119,8 +2406,20 @@ function stepSimulation(state, inputMask) {
         }
 
         if (!removeProj && pr.owner === 'enemy') {
-            // If the player's swing line crosses the star, deflect it based on timing BEFORE it can hit the player!
-            if (playerSwinging && pr.kind !== 'fireball' &&
+            // If the player's (or a Shadow Clone's!) swing line crosses the star, deflect it BEFORE it can hit!
+            var deflectedByClone = false;
+            if (pr.kind !== 'fireball' && state.clones && state.clones.length > 0) {
+                for (var clp = 0; clp < state.clones.length; clp++) {
+                    if (isPlayerAttackSwinging(state.clones[clp]) &&
+                        tryDeflectProjectileWithSwing(state, state.clones[clp], pr, prevX, soundEvents)) {
+                        deflectedByClone = true;
+                        break;
+                    }
+                }
+            }
+            if (deflectedByClone) {
+                // Deflected by Shadow Clone!
+            } else if (playerSwinging && pr.kind !== 'fireball' &&
                 tryDeflectProjectileWithSwing(state, p, pr, prevX, soundEvents)) {
                 // Now owned by player; continue flying on its new deflected trajectory
             } else if (Math.abs(pr.x - p.x) < 24 && pr.y >= p.y - 76 && pr.y <= p.y - 6) {
@@ -2320,8 +2619,20 @@ function stepSimulation(state, inputMask) {
                     }
                 }
             } else {
-                // Enemy/env barrel: swing line kicks it back into a bowling ball BEFORE it can hit the player!
-                if (playerSwinging && tryDeflectTrapWithSwing(state, p, trp, prevBX, prevBY, soundEvents)) {
+                // Enemy/env barrel: player or Shadow Clone swing line kicks it back into a bowling ball!
+                var barrelDeflectedByClone = false;
+                if (state.clones && state.clones.length > 0) {
+                    for (var clb = 0; clb < state.clones.length; clb++) {
+                        if (isPlayerAttackSwinging(state.clones[clb]) &&
+                            tryDeflectTrapWithSwing(state, state.clones[clb], trp, prevBX, prevBY, soundEvents)) {
+                            barrelDeflectedByClone = true;
+                            break;
+                        }
+                    }
+                }
+                if (barrelDeflectedByClone) {
+                    // Deflected by Shadow Clone!
+                } else if (playerSwinging && tryDeflectTrapWithSwing(state, p, trp, prevBX, prevBY, soundEvents)) {
                     // Now owned by player; rolls/arcs into enemies!
                 } else if (Math.abs(trp.x - p.x) < 28 && p.y > GROUND_Y - 34) {
                     hitPlayer(state, 13, trp.vx >= 0 ? 1 : -1, null, false, soundEvents);

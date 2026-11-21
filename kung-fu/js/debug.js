@@ -83,6 +83,15 @@ function hashSimState(state) {
     }
 
     h = fnv1aMixUint32(h, (state.afterimages && state.afterimages.length) || 0);
+    var clonesList = state.clones || [];
+    h = fnv1aMixUint32(h, clonesList.length);
+    for (var cl = 0; cl < clonesList.length; cl++) {
+        var cObj = clonesList[cl];
+        h = fnv1aMixUint32(h, cObj.id);
+        h = fnv1aMixFloat64(h, cObj.x);
+        h = fnv1aMixFloat64(h, cObj.y);
+        h = fnv1aMixString(h, cObj.action);
+    }
 
     h = fnv1aMixUint32(h, state.enemies.length);
     for (var i = 0; i < state.enemies.length; i++) {
@@ -369,6 +378,13 @@ function checkSimInvariants(sim) {
     }
     for (var k = 0; k < sim.traps.length; k++) {
         if (!isFinitePose(sim.traps[k])) return 'trap non-finite';
+    }
+    if (sim.clones) {
+        for (var cl = 0; cl < sim.clones.length; cl++) {
+            if (!isFinitePose(sim.clones[cl]) || sim.clones[cl].x < 0 || sim.clones[cl].x > FLOOR_LENGTH) {
+                return 'clone #' + sim.clones[cl].id + ' out of bounds';
+            }
+        }
     }
     return null;
 }

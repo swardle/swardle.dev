@@ -111,7 +111,19 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         var af = srcAfter[a];
         afterimages[a] = {
             id: af.id, x: af.x, y: af.y, facing: af.facing,
-            pose: af.pose, life: af.life, maxLife: af.maxLife
+            pose: af.pose, color: af.color || '#ff5247',
+            life: af.life, maxLife: af.maxLife
+        };
+    }
+
+    var srcClones = simState.clones || [];
+    var clones = new Array(srcClones.length);
+    for (var cl = 0; cl < srcClones.length; cl++) {
+        var cObj = srcClones[cl];
+        clones[cl] = {
+            id: cObj.id, x: cObj.x, y: cObj.y, facing: cObj.facing,
+            action: cObj.action, actionTick: cObj.actionTick,
+            walkCycle: cObj.walkCycle, slotIndex: cObj.slotIndex || 0
         };
     }
 
@@ -161,6 +173,7 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         slashes: slashes,
         callouts: callouts,
         afterimages: afterimages,
+        clones: clones,
         bolts: bolts
     };
 }
@@ -430,6 +443,37 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         }
     }
 
+    // 7. Autonomous Shadow Clones smooth sub-frame blending
+    var f0Clones = f0.clones || [];
+    var f1Clones = f1.clones || [];
+    var cl1Map = buildIdMap(f1Clones);
+    var seenCl = {};
+    var bClones = [];
+    for (var cli = 0; cli < f0Clones.length; cli++) {
+        var cl0 = f0Clones[cli];
+        var cl1 = cl1Map[cl0.id];
+        seenCl[cl0.id] = true;
+        if (cl1) {
+            bClones.push({
+                id: cl0.id,
+                x: lerp(cl0.x, cl1.x, alpha),
+                y: lerp(cl0.y, cl1.y, alpha),
+                facing: alpha < 0.5 ? cl0.facing : cl1.facing,
+                action: alpha < 0.5 ? cl0.action : cl1.action,
+                actionTick: lerp(cl0.actionTick || 0, cl1.actionTick || 0, alpha),
+                walkCycle: lerp(cl0.walkCycle || 0, cl1.walkCycle || 0, alpha),
+                slotIndex: cl0.slotIndex || 0
+            });
+        } else if (alpha < 0.5) {
+            bClones.push(cl0);
+        }
+    }
+    if (alpha >= 0.5) {
+        for (var cli2 = 0; cli2 < f1Clones.length; cli2++) {
+            if (!seenCl[f1Clones[cli2].id]) bClones.push(f1Clones[cli2]);
+        }
+    }
+
     return {
         tick: f0.tick + alpha,
         inputMask: f1.inputMask || 0,
@@ -456,6 +500,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         slashes: bSlashes,
         callouts: bCallouts,
         afterimages: hud.afterimages || [],
+        clones: bClones,
         bolts: hud.bolts || []
     };
 }

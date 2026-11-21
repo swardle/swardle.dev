@@ -185,10 +185,17 @@ function renderGameFrame(ctx, canvasW, canvasH, frame, opts) {
         drawEnemyFighter(ctx, frame.enemies[ei], frame.tick);
     }
 
-    // Shadow Clone Afterimages (Shadow Ronin Tier 1+)
+    // Motion / Flash-Step Afterimages
     if (frame.afterimages && frame.afterimages.length > 0) {
         for (var ai = 0; ai < frame.afterimages.length; ai++) {
             drawAfterimageClone(ctx, frame.afterimages[ai], frame.tick);
+        }
+    }
+
+    // Autonomous Naruto-Style Shadow Clones (Shadow Ronin Tier 1: 1 clone, Tier 2: 2 clones)
+    if (frame.clones && frame.clones.length > 0) {
+        for (var cli = 0; cli < frame.clones.length; cli++) {
+            drawShadowCloneFighter(ctx, frame.clones[cli], frame.tick);
         }
     }
 
@@ -783,7 +790,8 @@ function drawFighterSilhouette(ctx, opts) {
 }
 
 function drawAfterimageClone(ctx, af, tick) {
-    var alpha = Math.max(0.12, (af.life / (af.maxLife || 16)) * 0.52);
+    var alpha = Math.max(0.10, (af.life / (af.maxLife || 12)) * 0.48);
+    var col = af.color || '#ff5247';
     ctx.save();
     ctx.globalAlpha = alpha;
     drawFighterSilhouette(ctx, {
@@ -792,11 +800,31 @@ function drawAfterimageClone(ctx, af, tick) {
         facing: af.facing,
         scale: 1.04,
         pose: af.pose || 'attack1',
-        phase: tick * 0.14,
+        phase: tick * 0.16,
+        flash: false,
+        rimColor: col,
+        headbandColor: col,
+        actionTick: 6
+    });
+    ctx.restore();
+}
+
+function drawShadowCloneFighter(ctx, cl, tick) {
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    drawFighterSilhouette(ctx, {
+        x: cl.x,
+        y: cl.y,
+        facing: cl.facing,
+        scale: 1.00,
+        pose: cl.action || 'idle',
+        phase: (cl.action === 'run') ? (cl.walkCycle || 0) : (tick * 0.13 + (cl.slotIndex || 0)),
         flash: false,
         rimColor: '#ff5247',
         headbandColor: '#ff5247',
-        actionTick: 6
+        actionTick: cl.actionTick || 0,
+        streakTier: 1,
+        streakAuraColor: 'rgba(255, 82, 71, 0.7)'
     });
     ctx.restore();
 }

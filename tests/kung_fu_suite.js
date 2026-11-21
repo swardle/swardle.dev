@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x4a2e6d22'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0xdb8f3b39'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0xd7e59e8f'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0x85afbace'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -409,21 +409,21 @@ function runKungFuTestSuite() {
 
     // 3e. All 5 Playable Fighters Live Streak Skills (5-Hit Tier 1 & 10-Hit Tier 2)
     runCase('All 5 playable fighters trigger unique Tier 1 (5+) & Tier 2 (10+) streak skills', function () {
-        // 1. SHADOW RONIN: Afterimage clone (5+) + Crescent Wave (10+)
+        // 1. SHADOW RONIN: 1 autonomous AI clone (5+ hits) -> 2 autonomous AI clones (10+ hits) that fight on their own!
         var sShadow = createSimState({ seed: 501, fighterId: 'shadow' });
         sShadow.enemies = [];
-        sShadow.comboCount = 10; sShadow.comboDecayTimer = 150; sShadow.streakTier = 2;
+        sShadow.comboCount = 5; sShadow.comboDecayTimer = 150; sShadow.streakTier = 1;
         sShadow.player.x = 200;
-        var shEn = spawnEnemy(sShadow, 'boss', 260, -1);
+        var shEn = spawnEnemy(sShadow, 'boss', 320, -1);
         shEn.cooldown = 999;
-        stepSimulation(sShadow, INPUT_JUMP);
-        stepSimulation(sShadow, INPUT_ATTACK); // airkick -> clone + crescent wave
-        kfAssert(sShadow.afterimages.length >= 1, 'Shadow Ronin failed to spawn afterimage clone');
-        var hasCrescent = false;
-        for (var p1 = 0; p1 < sShadow.projectiles.length; p1++) {
-            if (sShadow.projectiles[p1].kind === 'crescent') hasCrescent = true;
-        }
-        kfAssert(hasCrescent, 'Shadow Ronin Tier 2 failed to fire crescent wave');
+        // Player stands completely still — autonomous clone should summon & run over to fight the boss on its own!
+        for (var sc1 = 0; sc1 < 55; sc1++) stepSimulation(sShadow, INPUT_NONE);
+        kfAssert(sShadow.clones.length === 1, 'Shadow Ronin Tier 1 should have 1 autonomous clone, got ' + sShadow.clones.length);
+        kfAssert(shEn.hp < shEn.maxHp, 'Autonomous Shadow Clone failed to attack enemy on its own');
+        // Upgrade to Tier 2 (10+ hits) -> 2 autonomous Shadow Clones!
+        sShadow.comboCount = 10; sShadow.comboDecayTimer = 150; sShadow.streakTier = 2;
+        stepSimulation(sShadow, INPUT_NONE);
+        kfAssert(sShadow.clones.length === 2, 'Shadow Ronin Tier 2 should have 2 autonomous clones, got ' + sShadow.clones.length);
 
         // 2. DRAGON FIST: Rising Dragon Uppercut + Meteor Dive Slam (10+)
         var sDragon = createSimState({ seed: 502, fighterId: 'dragon' });
@@ -486,24 +486,33 @@ function runKungFuTestSuite() {
         }
         kfAssert(jadeCount >= 3, 'Lotus Blade Tier 2 spin should launch jade_blade fan, got ' + jadeCount);
 
-        // 5. PHANTOM GALE: Pinball Launch (5+) + Invuln Flash-Step Dash (10+)
+        // 5. PHANTOM GALE: Faster base movement + Early Flash-Step (3+/5+ hits) + Pinball Blitz (10+ hits)
         var sGale = createSimState({ seed: 505, fighterId: 'gale' });
         sGale.enemies = [];
+        sGale.player.x = 200;
+        stepSimulation(sGale, INPUT_RIGHT);
+        kfAssert(sGale.player.vx > PLAYER_SPEED * 1.15,
+            'Phantom Gale should run faster than baseline speed, got vx=' + sGale.player.vx);
+        // Early Flash-Step at 3 hits on attack3, AND combo Flash-Step at 5 hits on attack2!
+        sGale.comboCount = 5; sGale.comboDecayTimer = 150; sGale.streakTier = 1;
+        sGale.player.comboStep = 1; sGale.player.comboWindow = 20;
+        stepSimulation(sGale, INPUT_ATTACK); // attack2 -> early Tier-1 Flash-Step Dash!
+        kfAssert(sGale.player.action === 'attack2' && sGale.player.invulnTimer >= 7 && sGale.player.vx > 10,
+            'Phantom Gale Tier 1 (5+ hits) attack2 should trigger Flash-Step Dash');
+        // Tier 2 (10+ hits) -> Pinball Super-Bowling wall ricochet!
         sGale.comboCount = 10; sGale.comboDecayTimer = 150; sGale.streakTier = 2;
-        sGale.player.x = 680;
+        sGale.player.x = 680; sGale.player.action = 'idle'; sGale.player.actionTick = 0;
+        sGale.player.comboStep = 0; sGale.player.comboWindow = 0; sGale.player.attackHeld = false;
+        sGale.cameraX = 0;
         var gaEn = spawnEnemy(sGale, 'staff', 725, -1);
         gaEn.cooldown = 999;
-        stepSimulation(sGale, INPUT_ATTACK); // even jab launches at Tier 1+
+        stepSimulation(sGale, INPUT_ATTACK); // Tier 2 jab launches & pinball-bounces!
         var sawBounce = false;
         for (var gb = 0; gb < 25; gb++) {
             stepSimulation(sGale, INPUT_NONE);
             if (gaEn.wallBounces > 0) sawBounce = true;
         }
-        kfAssert(sawBounce, 'Phantom Gale Tier 1+ should pinball-bounce launched enemy off camera edge');
-        sGale.player.x = 200; sGale.player.comboStep = 2; sGale.player.comboWindow = 20;
-        stepSimulation(sGale, INPUT_ATTACK); // attack3 -> Flash-Step Dash!
-        kfAssert(sGale.player.invulnTimer >= 10 && sGale.player.vx > 10,
-            'Phantom Gale Tier 2 attack3 should trigger invuln Flash-Step Dash');
+        kfAssert(sawBounce, 'Phantom Gale Tier 2 should pinball-bounce launched enemy off camera edge');
 
         return 'all 5 fighters (shadow/dragon/thunder/lotus/gale) Tier 1+2 skills verified';
     });
