@@ -63,7 +63,8 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         projectiles[j] = {
             id: pr.id, kind: pr.kind || 'knife', x: pr.x, y: pr.y, vx: pr.vx,
             owner: pr.owner, spin: pr.spin,
-            radius: pr.radius || 11, power: pr.power || 0
+            radius: pr.radius || 11, power: pr.power || 0,
+            enemyKind: pr.enemyKind || null, scale: pr.scale || 1.0
         };
     }
 
@@ -71,7 +72,7 @@ function captureRenderFrame(simState, inputMask, stepResult) {
     for (var t = 0; t < simState.traps.length; t++) {
         var tr = simState.traps[t];
         traps[t] = {
-            id: tr.id, kind: tr.kind, x: tr.x, y: tr.y,
+            id: tr.id, kind: tr.kind, owner: tr.owner || 'env', x: tr.x, y: tr.y,
             angle: tr.angle, telegraph: tr.telegraph
         };
     }
@@ -297,7 +298,9 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
                 owner: alpha < 0.5 ? pr0.owner : pr1.owner,
                 spin: lerp(pr0.spin, pr1.spin, alpha),
                 radius: alpha < 0.5 ? (pr0.radius || 11) : (pr1.radius || 11),
-                power: alpha < 0.5 ? (pr0.power || 0) : (pr1.power || 0)
+                power: alpha < 0.5 ? (pr0.power || 0) : (pr1.power || 0),
+                enemyKind: pr0.enemyKind || null,
+                scale: pr0.scale || 1.0
             });
         } else if (alpha < 0.5) {
             bProj.push(pr0);
@@ -320,6 +323,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         if (t1) {
             bTraps.push({
                 id: t0.id, kind: t0.kind,
+                owner: alpha < 0.5 ? (t0.owner || 'env') : (t1.owner || 'env'),
                 x: lerp(t0.x, t1.x, alpha),
                 y: lerp(t0.y, t1.y, alpha),
                 angle: lerp(t0.angle, t1.angle, alpha),

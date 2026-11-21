@@ -754,7 +754,7 @@ function drawEnemyFighter(ctx, e, tick) {
     else if (e.state === 'windup') pose = 'windup';
     else if (e.state === 'attack') pose = (e.kind === 'staff' || e.kind === 'boss') ? 'attack1' : 'attack2';
     else if (e.state === 'leap') pose = 'jump';
-    else if (e.state === 'hurt') pose = 'hurt';
+    else if (e.state === 'hurt' || e.state === 'thrown') pose = 'hurt';
     else if (e.state === 'stunned') pose = 'stunned';
 
     var windupGlint = 0;
@@ -775,7 +775,7 @@ function drawEnemyFighter(ctx, e, tick) {
         pose: pose,
         phase: (pose === 'run') ? e.walkCycle : (tick * 0.14),
         flash: e.flashTimer > 0,
-        rimColor: e.kind === 'boss' ? 'rgba(230, 56, 40, 0.55)' : null,
+        rimColor: e.state === 'thrown' ? '#ffb830' : (e.kind === 'boss' ? 'rgba(230, 56, 40, 0.55)' : null),
         headbandColor: headband,
         hat: hat,
         weapon: weapon,
@@ -795,6 +795,42 @@ function drawEnemyFighter(ctx, e, tick) {
 }
 
 function drawProjectile(ctx, pr) {
+    if (pr.kind === 'ko_body') {
+        // Tumbling KO'd enemy flying through the air as a human bowling projectile!
+        var sc = pr.scale || 1.0;
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        // Trailing golden-crimson motion streak
+        var streakDir = pr.vx >= 0 ? -1 : 1;
+        ctx.strokeStyle = 'rgba(255, 184, 48, 0.55)';
+        ctx.lineWidth = 6 * sc;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(streakDir * 36 * sc, -pr.vy * 1.4);
+        ctx.stroke();
+
+        ctx.rotate(pr.spin);
+        ctx.scale(sc, sc);
+        ctx.shadowColor = '#ffb830';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#0b0909';
+        ctx.strokeStyle = '#0b0909';
+        // Compact tumbling martial-artist silhouette
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 12, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, -21, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        drawLimb(ctx, -6, 10, -18, 22, 6);
+        drawLimb(ctx, 6, 10, 18, 20, 6);
+        drawLimb(ctx, -8, -8, -22, -16, 5.5);
+        drawLimb(ctx, 8, -8, 22, -14, 5.5);
+        ctx.restore();
+        return;
+    }
+
     if (pr.kind === 'fireball') {
         var dir = pr.vx >= 0 ? 1 : -1;
         var r = pr.radius || 18;
@@ -881,41 +917,63 @@ function drawProjectile(ctx, pr) {
 }
 
 function drawTrap(ctx, tr, tick) {
+    var isPlayerOwned = tr.owner === 'player';
     if (tr.kind === 'barrel') {
         ctx.save();
         ctx.translate(tr.x, tr.y - 18);
+        if (isPlayerOwned) {
+            // Powered-up golden-crimson bowling aura!
+            var bg = ctx.createRadialGradient(0, 0, 12, 0, 0, 32);
+            bg.addColorStop(0, 'rgba(255, 210, 76, 0.65)');
+            bg.addColorStop(1, 'rgba(255, 140, 40, 0)');
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            ctx.arc(0, 0, 32, 0, Math.PI * 2);
+            ctx.fill();
+        }
         ctx.rotate(tr.angle);
-        ctx.fillStyle = '#18100d';
-        ctx.strokeStyle = '#d96b27';
-        ctx.lineWidth = 3;
+        ctx.fillStyle = isPlayerOwned ? '#24140a' : '#18100d';
+        ctx.strokeStyle = isPlayerOwned ? '#ffd24c' : '#d96b27';
+        ctx.lineWidth = isPlayerOwned ? 3.5 : 3;
         ctx.beginPath();
         ctx.arc(0, 0, 18, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         // Spokes
-        ctx.strokeStyle = '#ffb830';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = isPlayerOwned ? '#fff3c4' : '#ffb830';
+        ctx.lineWidth = 2.2;
         ctx.beginPath();
         ctx.moveTo(-12, 0); ctx.lineTo(12, 0);
         ctx.moveTo(0, -12); ctx.lineTo(0, 12);
         ctx.stroke();
         ctx.restore();
     } else if (tr.kind === 'tile') {
-        // Ground danger ink-ring telegraph!
-        var pulse = 0.55 + Math.sin(tick * 0.4) * 0.35;
-        ctx.strokeStyle = 'rgba(235, 50, 35, ' + pulse + ')';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.ellipse(tr.x, GROUND_Y + 2, 24, 6, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        if (!isPlayerOwned) {
+            // Ground danger ink-ring telegraph!
+            var pulse = 0.55 + Math.sin(tick * 0.4) * 0.35;
+            ctx.strokeStyle = 'rgba(235, 50, 35, ' + pulse + ')';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.ellipse(tr.x, GROUND_Y + 2, 24, 6, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
-        if (tr.telegraph <= 0) {
+        if (isPlayerOwned || tr.telegraph <= 0) {
             ctx.save();
             ctx.translate(tr.x, tr.y);
+            if (isPlayerOwned) {
+                var tg = ctx.createRadialGradient(0, 0, 6, 0, 0, 26);
+                tg.addColorStop(0, 'rgba(255, 210, 76, 0.65)');
+                tg.addColorStop(1, 'rgba(255, 180, 40, 0)');
+                ctx.fillStyle = tg;
+                ctx.beginPath();
+                ctx.arc(0, 0, 26, 0, Math.PI * 2);
+                ctx.fill();
+            }
             ctx.rotate(tr.angle);
-            ctx.fillStyle = '#141010';
-            ctx.strokeStyle = '#d92828';
-            ctx.lineWidth = 2;
+            ctx.fillStyle = isPlayerOwned ? '#241c18' : '#141010';
+            ctx.strokeStyle = isPlayerOwned ? '#ffd24c' : '#d92828';
+            ctx.lineWidth = isPlayerOwned ? 2.6 : 2;
             ctx.fillRect(-16, -7, 32, 14);
             ctx.strokeRect(-16, -7, 32, 14);
             ctx.restore();

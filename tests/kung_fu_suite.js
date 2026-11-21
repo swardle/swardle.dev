@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x1ba3d538'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0x155d8c54'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0xf08838e9'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0xe874e608'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -203,6 +203,68 @@ function runKungFuTestSuite() {
             'Expected varied close-range deflection angles (up=' + upwardCount + ', floorBounces=' + bounceCount + ')');
 
         return 'tick-0 return + upward tile break + varied angles (' + upwardCount + ' up, ' + bounceCount + ' floor bounces)';
+    });
+
+    // 3b. Deflecting Barrels & Falling Bricks + Heavy-Finisher / KO Enemy Bowling
+    runCase('Barrels, falling bricks, & launched enemies bowl into other enemies', function () {
+        // A: Swinging at rolling barrel reverses it as a bowling ball that KOs multiple enemies!
+        var simB = createSimState({ seed: 310, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simB.enemies = [];
+        simB.player.x = 180;
+        simB.player.facing = 1;
+        var be1 = spawnEnemy(simB, 'brawler', 330, -1);
+        var be2 = spawnEnemy(simB, 'brawler', 410, -1);
+        be1.cooldown = 999; be2.cooldown = 999;
+        simB.traps.push({
+            id: allocEntityId(simB), kind: 'barrel', owner: 'env',
+            x: 220, y: GROUND_Y, vx: -4.2, vy: 0, gravity: 0, angle: 0,
+            telegraph: 0, active: true, hitsLeft: 4, bounced: 0, life: 200
+        });
+        stepSimulation(simB, INPUT_ATTACK);
+        kfAssert(simB.player.hp === simB.player.maxHp, 'Player should take no damage when deflecting barrel');
+        kfAssert(simB.traps.length === 1 && simB.traps[0].owner === 'player' && simB.traps[0].vx > 0,
+            'Expected barrel kicked back as player bowling ball');
+        for (var bt = 0; bt < 35; bt++) stepSimulation(simB, INPUT_NONE);
+        kfAssert(simB.enemiesDefeated === 2, 'Expected bowling barrel to KO both brawlers, got ' + simB.enemiesDefeated);
+
+        // B: Swinging at a falling brick bats it straight into an enemy!
+        var simT = createSimState({ seed: 311, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simT.enemies = [];
+        simT.player.x = 180;
+        simT.player.facing = 1;
+        var te1 = spawnEnemy(simT, 'brawler', 350, -1);
+        te1.cooldown = 999;
+        simT.traps.push({
+            id: allocEntityId(simT), kind: 'tile', owner: 'env',
+            x: 222, y: GROUND_Y - 56, vx: 0, vy: 6.0, gravity: 0.85, angle: 0,
+            telegraph: 0, active: true, bounced: 0, damage: 28, life: 120
+        });
+        stepSimulation(simT, INPUT_ATTACK);
+        kfAssert(simT.player.hp === simT.player.maxHp, 'Player should take no damage when batting falling brick');
+        kfAssert(simT.traps.length === 1 && simT.traps[0].owner === 'player' && simT.traps[0].vx > 0,
+            'Expected falling brick deflected toward enemy');
+        for (var tt = 0; tt < 30; tt++) stepSimulation(simT, INPUT_NONE);
+        kfAssert(simT.enemiesDefeated === 1 || te1.hp < te1.maxHp, 'Deflected brick did not hit enemy');
+
+        // C: 3rd-hit finisher launches enemy into another enemy behind them!
+        var simL = createSimState({ seed: 312, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simL.enemies = [];
+        simL.player.x = 180;
+        simL.player.facing = 1;
+        var front = spawnEnemy(simL, 'staff', 235, -1);
+        var back = spawnEnemy(simL, 'brawler', 340, -1);
+        front.cooldown = 999; back.cooldown = 999;
+        // 3-hit combo on front enemy -> attack3 KOs & launches front into back!
+        stepSimulation(simL, INPUT_ATTACK);
+        for (var c1 = 0; c1 < 16; c1++) stepSimulation(simL, INPUT_NONE);
+        stepSimulation(simL, INPUT_ATTACK);
+        for (var c2 = 0; c2 < 20; c2++) stepSimulation(simL, INPUT_NONE);
+        stepSimulation(simL, INPUT_ATTACK);
+        for (var c3 = 0; c3 < 45; c3++) stepSimulation(simL, INPUT_NONE);
+        kfAssert(back.hp < back.maxHp || simL.enemiesDefeated === 2,
+            'Expected launched front enemy to bowl into back enemy (back hp=' + back.hp + '/' + back.maxHp + ')');
+
+        return 'barrel 2x KO + brick shot + enemy bowling crash OK';
     });
 
     // 3b. Charged Street Fighter Power Ball (Hadouken) Launch, Knife Clash, & Super Pierce

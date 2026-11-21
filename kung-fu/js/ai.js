@@ -80,23 +80,50 @@ function computeAiInput(ai, simState) {
         }
     }
 
-    // 3. Threat Scan: Rolling Barrels & Falling Roof Tiles
+    // 3. Threat Scan: Rolling Barrels & Falling Roof Bricks -> Deflect into Enemies or Jump!
     for (var ti = 0; ti < simState.traps.length; ti++) {
         var tr = simState.traps[ti];
+        if (tr.owner === 'player') continue;
         if (tr.kind === 'barrel') {
             var bdx = tr.x - p.x;
+            var absBdx = Math.abs(bdx);
             var bApproaching = (bdx > 0 && tr.vx < 0) || (bdx < 0 && tr.vx > 0);
-            if (bApproaching && Math.abs(bdx) < 88 && p.onGround && ai.jumpCooldown === 0) {
+            if (bApproaching && absBdx < 86) {
                 ai.chargeHoldTicks = 0;
-                ai.jumpCooldown = 28;
-                ai.lastMode = 'evade';
-                mask |= INPUT_JUMP;
-                mask |= (tr.vx < 0 ? INPUT_RIGHT : INPUT_LEFT);
-                return mask;
+                var bDir = bdx >= 0 ? 1 : -1;
+                if ((tr.id % 3 === 0) && p.onGround && ai.jumpCooldown === 0 && absBdx > 24) {
+                    ai.jumpCooldown = 28;
+                    ai.lastMode = 'evade';
+                    return INPUT_JUMP | (tr.vx < 0 ? INPUT_RIGHT : INPUT_LEFT);
+                }
+                if (p.attackHeld) {
+                    ai.lastMode = 'deflect';
+                    return INPUT_NONE;
+                }
+                ai.attackCooldown = 6;
+                ai.lastMode = 'deflect';
+                return (p.facing !== bDir)
+                    ? ((bDir > 0 ? INPUT_RIGHT : INPUT_LEFT) | INPUT_ATTACK)
+                    : INPUT_ATTACK;
             }
-        } else if (tr.kind === 'tile' && tr.telegraph <= 16) {
+        } else if (tr.kind === 'tile') {
             var tdx = tr.x - p.x;
-            if (Math.abs(tdx) < 44) {
+            var absTdx = Math.abs(tdx);
+            if (tr.telegraph <= 0 && absTdx < 76 && tr.y >= p.y - 115 && tr.y <= p.y) {
+                // Bat the falling roof brick straight into enemies!
+                ai.chargeHoldTicks = 0;
+                if (p.attackHeld) {
+                    ai.lastMode = 'deflect';
+                    return INPUT_NONE;
+                }
+                ai.attackCooldown = 6;
+                ai.lastMode = 'deflect';
+                var tDir = tdx >= 0 ? 1 : -1;
+                return (p.facing !== tDir)
+                    ? ((tDir > 0 ? INPUT_RIGHT : INPUT_LEFT) | INPUT_ATTACK)
+                    : INPUT_ATTACK;
+            } else if (tr.telegraph > 0 && tr.telegraph <= 14 && absTdx < 26) {
+                // Step slightly aside so we're cleanly positioned to bat or dodge the brick
                 ai.chargeHoldTicks = 0;
                 ai.lastMode = 'evade';
                 return (tdx >= 0) ? INPUT_LEFT : INPUT_RIGHT;

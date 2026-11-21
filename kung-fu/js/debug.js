@@ -90,6 +90,7 @@ function hashSimState(state) {
         h = fnv1aMixUint32(h, e.hp);
         h = fnv1aMixString(h, e.state);
         h = fnv1aMixUint32(h, e.stateTick);
+        h = fnv1aMixUint32(h, e.thrownTimer || 0);
         h = fnv1aMixUint32(h, e.cooldown);
     }
 
@@ -112,6 +113,7 @@ function hashSimState(state) {
         var tr = state.traps[t];
         h = fnv1aMixUint32(h, tr.id);
         h = fnv1aMixString(h, tr.kind);
+        h = fnv1aMixString(h, tr.owner || 'env');
         h = fnv1aMixFloat64(h, tr.x);
         h = fnv1aMixFloat64(h, tr.y);
         h = fnv1aMixUint32(h, tr.telegraph);
