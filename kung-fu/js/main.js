@@ -937,7 +937,6 @@
             bindTouchButton('btn-left', 'left');
             bindTouchButton('btn-right', 'right');
             bindTouchButton('btn-jump', 'jump');
-            bindTouchButton('btn-block', 'block');
             bindTouchButton('btn-attack', 'attack');
         }
 

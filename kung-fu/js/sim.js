@@ -18,7 +18,6 @@ var JUMP_VEL           = -14.2;
 var PLAYER_SPEED       = 4.6;
 var PLAYER_AIR_SPEED   = 4.2;
 var PLAYER_MAX_HP      = 200;
-var PARRY_WINDOW_TICKS = 11;
 var COUNTER_WINDOW     = 34;
 var CHARGE_VISUAL_TICKS = 12;
 var CHARGE_READY_TICKS  = 34;
@@ -75,7 +74,6 @@ function createPlayer(state) {
         attackBuffer: 0,
         jumpBuffer: 0,
         parryCounterTimer: 0,
-        blockHeldTicks: 0,
         attackHeld: false,
         attackChargeTicks: 0,
         invulnTimer: 0,
@@ -195,7 +193,7 @@ function cloneSimState(state) {
             action: p.action, actionTick: p.actionTick, actionDuration: p.actionDuration,
             swingId: p.swingId, comboStep: p.comboStep, comboWindow: p.comboWindow,
             attackBuffer: p.attackBuffer, jumpBuffer: p.jumpBuffer,
-            parryCounterTimer: p.parryCounterTimer, blockHeldTicks: p.blockHeldTicks,
+            parryCounterTimer: p.parryCounterTimer,
             attackHeld: p.attackHeld, attackChargeTicks: p.attackChargeTicks,
             invulnTimer: p.invulnTimer, walkCycle: p.walkCycle, flashTimer: p.flashTimer
         } : null,
@@ -628,51 +626,10 @@ function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents)
     }
 }
 
-// Applies an incoming attack/projectile/trap to the player, resolving Perfect Parry vs Guard vs Hit
+// Applies an incoming attack/projectile/trap hit to the player
 function hitPlayer(state, dmg, knockDir, attackerEnemy, isProjectile, soundEvents) {
     var p = state.player;
     if (!p || !p.alive || p.invulnTimer > 0) return 'ignored';
-
-    var isBlocking = (p.action === 'block' || p.action === 'parry');
-    if (isBlocking && p.blockHeldTicks <= PARRY_WINDOW_TICKS) {
-        // PERFECT PARRY!
-        p.action = 'parry';
-        p.actionTick = 0;
-        p.actionDuration = 14;
-        p.parryCounterTimer = COUNTER_WINDOW;
-        p.invulnTimer = 14;
-        p.attackChargeTicks = 0;
-        p.hp = Math.min(p.maxHp, p.hp + 8); // small martial-arts focus heal
-        state.parriesLanded += 1;
-        state.score += 150;
-        state.hitstopTimer = 5;
-        state.screenShake = 6.5;
-
-        spawnRingEffect(state, p.x + p.facing * 20, p.y - 46, '#ffd24c', 74);
-        spawnParticles(state, p.x + p.facing * 20, p.y - 46, 14, '#ffd24c', 2.5, 7.0, 1.0);
-        spawnCallout(state, p.x, p.y - 86, 'PARRY!', '#ffd24c');
-        soundEvents.push('parry');
-
-        if (attackerEnemy && attackerEnemy.hp > 0) {
-            attackerEnemy.state = 'stunned';
-            attackerEnemy.stateTick = 0;
-            attackerEnemy.stateDur = attackerEnemy.kind === 'boss' ? 38 : 52;
-            attackerEnemy.vx = -knockDir * 5.2;
-        }
-        return 'parry';
-    }
-
-    if (isBlocking) {
-        // Standard Guard: 80% damage reduction, small chip pushback
-        var chip = Math.max(1, Math.round(dmg * 0.2));
-        p.hp = Math.max(1, p.hp - chip);
-        p.vx = knockDir * 3.0;
-        p.invulnTimer = 10;
-        p.attackChargeTicks = 0;
-        spawnParticles(state, p.x + p.facing * 18, p.y - 44, 6, '#e8dcc0', 1.5, 4.0, 0.5);
-        soundEvents.push('block');
-        return 'block';
-    }
 
     // Direct Hit
     p.hp -= dmg;
@@ -707,6 +664,140 @@ function hitPlayer(state, dmg, knockDir, attackerEnemy, isProjectile, soundEvent
         soundEvents.push('player_hit');
     }
     return 'hit';
+}
+
+function isPlayerAttackSwinging(p) {
+    if (!p || !p.alive) return false;
+    var spec = PLAYER_MOVES[p.action];
+    if (!spec) return false;
+    return p.actionTick <= spec.end + 1;
+}
+
+function tryDeflectProjectileWithSwing(state, p, pr, prevX, soundEvents) {
+    var spec = PLAYER_MOVES[p.action];
+    if (!spec) return false;
+
+    var reach = spec.reach + 20;
+    var swingMinX = p.facing > 0 ? (p.x - 16) : (p.x - reach);
+    var swingMaxX = p.facing > 0 ? (p.x + reach) : (p.x + 16);
+    var segMinX = Math.min(prevX, pr.x) - 10;
+    var segMaxX = Math.max(prevX, pr.x) + 10;
+
+    if (segMaxX < swingMinX || segMinX > swingMaxX || pr.y < p.y - 98 || pr.y > p.y + 12) {
+        return false;
+    }
+
+    // Determine deflection outcome from timing & where along the swing arc the star hit
+    var relX = (pr.x - p.x) * p.facing;
+    var isHeavyMove = (p.action === 'attack3' || p.action === 'counter');
+    var isEarlyTip = !isHeavyMove && relX > 62;
+    var isSweetSpot = isHeavyMove ||
+        (p.actionTick >= Math.max(1, spec.start - 2) && p.actionTick <= spec.start + 3 && relX >= 20 && relX <= 62) ||
+        (relX >= 26 && relX <= 54);
+
+    pr.owner = 'player';
+    pr.bounced = false;
+    state.parriesLanded += 1;
+
+    if (isSweetSpot) {
+        // Crisp sweet-spot timing: send the star rocketing right back at the ninja who threw it!
+        var targetEnemy = null;
+        if (pr.sourceEnemyId) {
+            for (var si = 0; si < state.enemies.length; si++) {
+                if (state.enemies[si].id === pr.sourceEnemyId) {
+                    targetEnemy = state.enemies[si];
+                    break;
+                }
+            }
+        }
+        if (!targetEnemy) {
+            var bestDist = 999999;
+            for (var fi = 0; fi < state.enemies.length; fi++) {
+                var cand = state.enemies[fi];
+                var cdx = (cand.x - pr.x) * p.facing;
+                if (cdx > 0 && cdx < bestDist) {
+                    bestDist = cdx;
+                    targetEnemy = cand;
+                }
+            }
+        }
+
+        var retSpeed = Math.max(10.5, Math.abs(pr.vx) * 1.65);
+        if (targetEnemy) {
+            var rdx = targetEnemy.x - pr.x;
+            var rdy = (targetEnemy.y - 46 * targetEnemy.scale) - pr.y;
+            var rDist = detHypot(rdx, rdy);
+            if (rDist > 1e-4) {
+                pr.vx = (rdx / rDist) * retSpeed;
+                pr.vy = (rdy / rDist) * retSpeed;
+            } else {
+                pr.vx = p.facing * retSpeed;
+                pr.vy = 0;
+            }
+        } else {
+            pr.vx = p.facing * retSpeed;
+            pr.vy = 0;
+        }
+        pr.gravity = 0;
+        pr.damage = 30;
+        pr.life = 115;
+
+        p.parryCounterTimer = COUNTER_WINDOW;
+        p.hp = Math.min(p.maxHp, p.hp + 8);
+        state.score += 120;
+        if (state.hitstopTimer < 3) state.hitstopTimer = 3;
+        state.screenShake = Math.max(state.screenShake, 4.8);
+        spawnRingEffect(state, pr.x, pr.y, '#ffd24c', 56);
+        spawnParticles(state, pr.x, pr.y, 12, '#ffd24c', 2.0, 6.5, 0.8);
+        spawnCallout(state, pr.x, pr.y - 26, 'RETURN!', '#ffd24c');
+        soundEvents.push('parry');
+    } else if (isEarlyTip) {
+        // Early tip-of-swing swipe: bats the star high upward in a sweeping arc (can hit overhead tiles or drop onto enemies!)
+        pr.vx = p.facing * (6.2 + rngRange(state.rng, 0, 2.2));
+        pr.vy = -(7.8 + rngRange(state.rng, 0, 2.4));
+        pr.gravity = 0.24;
+        pr.damage = 26;
+        pr.life = 135;
+
+        state.score += 80;
+        if (state.hitstopTimer < 2) state.hitstopTimer = 2;
+        state.screenShake = Math.max(state.screenShake, 3.2);
+        spawnRingEffect(state, pr.x, pr.y, '#ffe7b3', 44);
+        spawnParticles(state, pr.x, pr.y, 9, '#ffe7b3', 1.8, 5.5, 1.2);
+        spawnCallout(state, pr.x, pr.y - 24, 'RICOCHET!', '#ffe7b3');
+        soundEvents.push('parry');
+    } else {
+        // Late / close-range swipe: wild angled deflection (sky pop-up, floor-skip bounce, or rising cross-cut!)
+        var mode = rngInt(state.rng, 0, 3);
+        if (mode === 0) {
+            // Steep upward pop-up
+            pr.vx = p.facing * (3.5 + rngRange(state.rng, 0, 2.2));
+            pr.vy = -(9.4 + rngRange(state.rng, 0, 1.8));
+            pr.gravity = 0.26;
+        } else if (mode === 1) {
+            // Downward floor-skip bounce toward enemies / barrels!
+            pr.vx = p.facing * (8.6 + rngRange(state.rng, 0, 1.6));
+            pr.vy = 5.4;
+            pr.gravity = 0.14;
+        } else {
+            // Rising diagonal slash over front threats into backline enemies
+            pr.vx = p.facing * (8.2 + rngRange(state.rng, 0, 1.8));
+            pr.vy = -(4.4 + rngRange(state.rng, 0, 1.6));
+            pr.gravity = 0.16;
+        }
+        pr.damage = 24;
+        pr.life = 130;
+
+        state.score += 75;
+        if (state.hitstopTimer < 2) state.hitstopTimer = 2;
+        state.screenShake = Math.max(state.screenShake, 3.0);
+        spawnRingEffect(state, pr.x, pr.y, '#f5ead6', 42);
+        spawnParticles(state, pr.x, pr.y, 9, '#f5ead6', 1.8, 5.5, 0.8);
+        spawnParticles(state, pr.x, pr.y, 5, '#ffd24c', 1.5, 4.5, 0.6);
+        spawnCallout(state, pr.x, pr.y - 24, 'DEFLECT!', '#f5ead6');
+        soundEvents.push('block');
+    }
+    return true;
 }
 
 // ----------------------------------------------------------------------------
@@ -749,7 +840,6 @@ function stepSimulation(state, inputMask) {
     var right  = (inputMask & INPUT_RIGHT) !== 0;
     var jump   = (inputMask & INPUT_JUMP) !== 0;
     var attack = (inputMask & INPUT_ATTACK) !== 0;
-    var block  = (inputMask & INPUT_BLOCK) !== 0;
 
     // Timers
     if (p.invulnTimer > 0) p.invulnTimer -= 1;
@@ -770,15 +860,8 @@ function stepSimulation(state, inputMask) {
     if (attackJustPressed) p.attackBuffer = 8;
     if (jump)              p.jumpBuffer = 8;
 
-    // Track block hold duration for Perfect Parry timing
-    if (block) {
-        p.blockHeldTicks += 1;
-    } else {
-        p.blockHeldTicks = 0;
-    }
-
     // Track attack hold duration for Street Fighter Power Ball charge-up
-    if (attack && p.action !== 'hurt' && p.action !== 'parry' && p.action !== 'block' && p.action !== 'ko') {
+    if (attack && p.action !== 'hurt' && p.action !== 'ko') {
         if (p.attackChargeTicks < CHARGE_MAX_TICKS) {
             p.attackChargeTicks += 1;
             if (p.attackChargeTicks === CHARGE_VISUAL_TICKS) {
@@ -802,13 +885,13 @@ function stepSimulation(state, inputMask) {
     var isAttacking = (p.action === 'attack1' || p.action === 'attack2' ||
                        p.action === 'attack3' || p.action === 'airkick' || p.action === 'counter');
     var canReleaseHadouken = attackJustReleased && releasedChargeTicks >= CHARGE_READY_TICKS &&
-        p.action !== 'hurt' && p.action !== 'parry' && p.action !== 'block' && p.action !== 'ko';
+        p.action !== 'hurt' && p.action !== 'ko';
 
     if (canReleaseHadouken) {
         if (left && !right) p.facing = -1;
         else if (right && !left) p.facing = 1;
         startPlayerHadouken(state, p, releasedChargeTicks, soundEvents);
-    } else if (p.action === 'hurt' || p.action === 'parry' || p.action === 'hadouken') {
+    } else if (p.action === 'hurt' || p.action === 'hadouken') {
         p.actionTick += 1;
         p.vx *= 0.84;
         if (p.actionTick >= p.actionDuration) {
@@ -820,77 +903,6 @@ function stepSimulation(state, inputMask) {
         var spec = PLAYER_MOVES[p.action];
         if (p.onGround) {
             p.vx *= 0.82;
-        }
-
-        // Swat / Deflect incoming enemy ninja stars with melee strikes!
-        if (p.actionTick >= 1 && p.actionTick <= spec.end) {
-            var swatCenterX = p.x + p.facing * (spec.reach * 0.55);
-            var swatHalfW = spec.reach * 0.55 + 16;
-            var swatYMin = p.y - 95;
-            var swatYMax = p.y + 12;
-
-            for (var pri = state.projectiles.length - 1; pri >= 0; pri--) {
-                var inc = state.projectiles[pri];
-                if (inc.owner !== 'enemy' || inc.kind === 'fireball' || inc.life <= 0) continue;
-                var inFrontX = (inc.x - p.x) * p.facing;
-                if (inFrontX >= -14 && Math.abs(inc.x - swatCenterX) <= swatHalfW &&
-                    inc.y >= swatYMin && inc.y <= swatYMax) {
-                    var isSweetSpot = (p.actionTick >= spec.start && p.actionTick <= spec.start + 2);
-                    var isHeavyMove = (p.action === 'attack3' || p.action === 'counter');
-                    var sendBack = isSweetSpot || isHeavyMove || (rngNextFloat(state.rng) < 0.45);
-
-                    if (sendBack) {
-                        inc.owner = 'player';
-                        inc.damage = 28;
-                        inc.life = 110;
-
-                        // Aim back at the ninja who threw it if still alive
-                        var thrower = null;
-                        if (inc.sourceEnemyId) {
-                            for (var si = 0; si < state.enemies.length; si++) {
-                                if (state.enemies[si].id === inc.sourceEnemyId) {
-                                    thrower = state.enemies[si];
-                                    break;
-                                }
-                            }
-                        }
-                        var retSpeed = Math.max(9.5, Math.abs(inc.vx) * 1.55);
-                        if (thrower) {
-                            var rdx = thrower.x - inc.x;
-                            var rdy = (thrower.y - 46 * thrower.scale) - inc.y;
-                            var rDist = detHypot(rdx, rdy);
-                            if (rDist > 1e-4) {
-                                inc.vx = (rdx / rDist) * retSpeed;
-                                inc.vy = (rdy / rDist) * retSpeed;
-                            } else {
-                                inc.vx = p.facing * retSpeed;
-                                inc.vy = 0;
-                            }
-                        } else {
-                            inc.vx = p.facing * retSpeed;
-                            inc.vy = 0;
-                        }
-
-                        state.score += 100;
-                        if (state.hitstopTimer < 3) state.hitstopTimer = 3;
-                        state.screenShake = Math.max(state.screenShake, 4.5);
-                        spawnRingEffect(state, inc.x, inc.y, '#ffd24c', 52);
-                        spawnParticles(state, inc.x, inc.y, 10, '#ffd24c', 2.0, 6.2, 0.8);
-                        spawnCallout(state, inc.x, inc.y - 26, 'DEFLECT!', '#ffd24c');
-                        soundEvents.push('parry');
-                    } else {
-                        // Knock / block the ninja star cleanly out of the air
-                        state.score += 40;
-                        if (state.hitstopTimer < 2) state.hitstopTimer = 2;
-                        spawnRingEffect(state, inc.x, inc.y, '#f2ede2', 36);
-                        spawnParticles(state, inc.x, inc.y, 8, '#f2ede2', 1.8, 5.2, 0.8);
-                        spawnParticles(state, inc.x, inc.y, 4, '#ffd24c', 1.5, 4.2, 0.5);
-                        spawnCallout(state, inc.x, inc.y - 22, 'BLOCK!', '#f5ead6');
-                        soundEvents.push('block');
-                        state.projectiles.splice(pri, 1);
-                    }
-                }
-            }
         }
 
         // Active hitbox window
@@ -949,18 +961,14 @@ function stepSimulation(state, inputMask) {
             p.actionTick = 0;
         }
     } else {
-        // Free movement / Block / Charge / Jump / Attack transitions
+        // Free movement / Charge / Jump / Attack transitions
         if (left && !right) {
             p.facing = -1;
         } else if (right && !left) {
             p.facing = 1;
         }
 
-        if (block && p.onGround && p.attackBuffer === 0) {
-            p.attackChargeTicks = 0;
-            p.action = 'block';
-            p.vx *= 0.72;
-        } else if (p.attackBuffer > 0) {
+        if (p.attackBuffer > 0) {
             p.attackBuffer = 0;
             startPlayerAttack(state, p, soundEvents);
         } else if (p.jumpBuffer > 0 && p.onGround) {
@@ -1242,26 +1250,43 @@ function stepSimulation(state, inputMask) {
         if (e.x > FLOOR_LENGTH - 18) e.x = FLOOR_LENGTH - 18;
     }
 
-    // --- 5. Projectiles (Thrown Knives & Charged Power Balls!) ---
+    // --- 5. Projectiles (Thrown Ninja Stars & Charged Power Balls!) ---
+    var playerSwinging = isPlayerAttackSwinging(p);
     for (var pi = state.projectiles.length - 1; pi >= 0; pi--) {
         var pr = state.projectiles[pi];
+        var prevX = pr.x;
         pr.x += pr.vx;
+        if (pr.gravity) {
+            pr.vy += pr.gravity;
+        }
         pr.y += pr.vy;
         pr.spin += (pr.kind === 'fireball') ? 0.28 : 0.42;
         pr.life -= 1;
 
-        var removeProj = (pr.life <= 0 || pr.x < state.cameraX - 120 || pr.x > state.cameraX + state.setup.viewWidth + 120);
+        var removeProj = (pr.life <= 0 || pr.x < state.cameraX - 120 || pr.x > state.cameraX + state.setup.viewWidth + 120 || pr.y < -220);
+
+        // Floor bounce once for deflected stars angled downward!
+        if (!removeProj && pr.owner === 'player' && pr.kind !== 'fireball' && pr.y >= GROUND_Y - 4 && pr.vy > 0) {
+            if (!pr.bounced) {
+                pr.y = GROUND_Y - 4;
+                pr.vy = -Math.max(4.6, Math.abs(pr.vy) * 0.72);
+                pr.bounced = true;
+                spawnParticles(state, pr.x, GROUND_Y - 2, 6, '#ffd24c', 1.2, 4.0, 1.5);
+                soundEvents.push('block');
+            } else {
+                spawnParticles(state, pr.x, GROUND_Y - 2, 5, '#f2ede2', 1.0, 3.2, 1.0);
+                removeProj = true;
+            }
+        }
 
         if (!removeProj && pr.owner === 'enemy') {
-            if (Math.abs(pr.x - p.x) < 24 && pr.y >= p.y - 76 && pr.y <= p.y - 6) {
+            // If the player's swing line crosses the star, deflect it based on timing BEFORE it can hit the player!
+            if (playerSwinging && pr.kind !== 'fireball' &&
+                tryDeflectProjectileWithSwing(state, p, pr, prevX, soundEvents)) {
+                // Now owned by player; continue flying on its new deflected trajectory
+            } else if (Math.abs(pr.x - p.x) < 24 && pr.y >= p.y - 76 && pr.y <= p.y - 6) {
                 var res = hitPlayer(state, pr.damage, pr.vx >= 0 ? 1 : -1, null, true, soundEvents);
-                if (res === 'parry') {
-                    // Deflect the knife straight back at high speed!
-                    pr.owner = 'player';
-                    pr.vx = -pr.vx * 1.45;
-                    pr.damage = 28;
-                    pr.life = 100;
-                } else if (res !== 'ignored') {
+                if (res !== 'ignored') {
                     removeProj = true;
                 }
             }
@@ -1316,14 +1341,55 @@ function stepSimulation(state, inputMask) {
                 }
             }
         } else if (!removeProj && pr.owner === 'player') {
-            for (var ej2 = state.enemies.length - 1; ej2 >= 0; ej2--) {
-                var target2 = state.enemies[ej2];
-                if (Math.abs(pr.x - target2.x) < 26 * target2.scale &&
-                    pr.y >= target2.y - 78 * target2.scale && pr.y <= target2.y) {
-                    var killed2 = damageEnemy(state, target2, pr.damage, pr.vx >= 0 ? 7.5 : -7.5, -3.5, 4, true, soundEvents);
-                    if (killed2) state.enemies.splice(ej2, 1);
+            // Deflected ninja stars can hit enemies, shatter falling roof tiles, smash barrels, or clash other stars!
+            for (var oi2 = state.projectiles.length - 1; oi2 >= 0; oi2--) {
+                if (oi2 === pi) continue;
+                var oStar = state.projectiles[oi2];
+                if (oStar.owner === 'enemy' && oStar.life > 0 &&
+                    Math.abs(pr.x - oStar.x) < 20 && Math.abs(pr.y - oStar.y) < 20) {
+                    oStar.life = 0;
+                    spawnRingEffect(state, pr.x, pr.y, '#ffd24c', 38);
+                    spawnParticles(state, pr.x, pr.y, 10, '#ffd24c', 2.0, 5.8, 0.6);
+                    spawnCallout(state, pr.x, pr.y - 20, 'CLASH!', '#ffd24c');
+                    state.score += 50;
+                    soundEvents.push('parry');
+                }
+            }
+
+            for (var dt = state.traps.length - 1; dt >= 0; dt--) {
+                var dTr = state.traps[dt];
+                if (dTr.kind === 'barrel' && Math.abs(pr.x - dTr.x) < 26 && Math.abs(pr.y - (dTr.y - 18)) < 26) {
+                    spawnParticles(state, dTr.x, dTr.y - 18, 12, '#d97828', 2.0, 6.0, 2.0);
+                    spawnParticles(state, dTr.x, dTr.y - 18, 6, '#ffd24c', 1.5, 4.5, 1.0);
+                    state.score += 75;
+                    soundEvents.push('hit');
+                    state.traps.splice(dt, 1);
                     removeProj = true;
                     break;
+                } else if (dTr.kind === 'tile' && dTr.telegraph <= 0 &&
+                    Math.abs(pr.x - dTr.x) < 26 && Math.abs(pr.y - dTr.y) < 22) {
+                    spawnRingEffect(state, dTr.x, dTr.y, '#ffd24c', 42);
+                    spawnParticles(state, dTr.x, dTr.y, 12, '#3a3430', 1.8, 5.5, 1.5);
+                    spawnParticles(state, dTr.x, dTr.y, 8, '#ffd24c', 1.5, 4.8, 1.0);
+                    spawnCallout(state, dTr.x, dTr.y - 22, 'TILE BREAK!', '#ffd24c');
+                    state.score += 100;
+                    soundEvents.push('heavy_hit');
+                    state.traps.splice(dt, 1);
+                    removeProj = true;
+                    break;
+                }
+            }
+
+            if (!removeProj) {
+                for (var ej2 = state.enemies.length - 1; ej2 >= 0; ej2--) {
+                    var target2 = state.enemies[ej2];
+                    if (Math.abs(pr.x - target2.x) < 28 * target2.scale &&
+                        pr.y >= target2.y - 82 * target2.scale && pr.y <= target2.y + 4) {
+                        var killed2 = damageEnemy(state, target2, pr.damage, pr.vx >= 0 ? 7.5 : -7.5, -3.5, 4, true, soundEvents);
+                        if (killed2) state.enemies.splice(ej2, 1);
+                        removeProj = true;
+                        break;
+                    }
                 }
             }
         }

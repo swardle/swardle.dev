@@ -2,7 +2,7 @@
 // kung-fu/js/input.js - Separated Input System for Shadow Pagoda
 //
 // Simulation never reads DOM events directly. Each 60Hz tick consumes a single
-// 5-bit integer bitmask from the InputController, which either samples live
+// 4-bit integer bitmask from the InputController, which either samples live
 // hardware inputs (keyboard/touch), drives the AI fighter, or replays a saved
 // input recording deterministically across iOS, Android, Windows, and macOS.
 // ============================================================================
@@ -12,7 +12,6 @@ var INPUT_LEFT   = 1 << 0; // 1
 var INPUT_RIGHT  = 1 << 1; // 2
 var INPUT_JUMP   = 1 << 2; // 4
 var INPUT_ATTACK = 1 << 3; // 8
-var INPUT_BLOCK  = 1 << 4; // 16
 
 var INPUT_FILE_FORMAT  = 'shadow-pagoda-input';
 var INPUT_FILE_VERSION = 1;
@@ -25,7 +24,6 @@ function createLiveInput() {
         left: false,
         right: false,
         attack: false,
-        block: false,
         jumpLatch: false,
         attackLatch: false,
         keysDown: {}
@@ -36,7 +34,6 @@ function clearLiveInput(live) {
     live.left = false;
     live.right = false;
     live.attack = false;
-    live.block = false;
     live.jumpLatch = false;
     live.attackLatch = false;
     live.keysDown = {};
@@ -47,7 +44,6 @@ function updateLiveHeldFlags(live) {
     live.left   = !!(k['arrowleft']  || k['a'] || k['touch_left']);
     live.right  = !!(k['arrowright'] || k['d'] || k['touch_right']);
     live.attack = !!(k[' '] || k['space'] || k['j'] || k['z'] || k['touch_attack']);
-    live.block  = !!(k['shift'] || k['k'] || k['x'] || k['s'] || k['arrowdown'] || k['touch_block']);
 }
 
 function liveInputKeyDown(live, key, code, isRepeat) {
@@ -92,11 +88,10 @@ function liveInputTouchButton(live, name, isPressed) {
 // Samples one tick's bitmask from live hardware and clears edge latches
 function sampleLiveInput(live) {
     var mask = INPUT_NONE;
-    if (live.left)                     mask |= INPUT_LEFT;
-    if (live.right)                    mask |= INPUT_RIGHT;
-    if (live.jumpLatch)                mask |= INPUT_JUMP;
+    if (live.left)                       mask |= INPUT_LEFT;
+    if (live.right)                      mask |= INPUT_RIGHT;
+    if (live.jumpLatch)                  mask |= INPUT_JUMP;
     if (live.attack || live.attackLatch) mask |= INPUT_ATTACK;
-    if (live.block)                    mask |= INPUT_BLOCK;
     live.jumpLatch = false;
     live.attackLatch = false;
     return mask;

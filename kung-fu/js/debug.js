@@ -73,7 +73,6 @@ function hashSimState(state) {
         h = fnv1aMixUint32(h, p.actionTick);
         h = fnv1aMixUint32(h, p.comboStep);
         h = fnv1aMixUint32(h, p.parryCounterTimer);
-        h = fnv1aMixUint32(h, p.blockHeldTicks);
         h = fnv1aMixUint32(h, p.attackHeld ? 1 : 0);
         h = fnv1aMixUint32(h, p.attackChargeTicks);
         h = fnv1aMixUint32(h, p.invulnTimer);
@@ -430,7 +429,7 @@ function runAiIntegrationTest(options) {
     pushReplayFrame(replay, sim);
     logDeterminismTick(logger, sim, INPUT_NONE);
 
-    var counts = { left: 0, right: 0, jump: 0, attack: 0, block: 0 };
+    var counts = { left: 0, right: 0, jump: 0, attack: 0 };
     var invariantError = null;
 
     for (var t = 0; t < maxTicks && !sim.isGameOver; t++) {
@@ -439,7 +438,6 @@ function runAiIntegrationTest(options) {
         if (mask & INPUT_RIGHT)  counts.right++;
         if (mask & INPUT_JUMP)   counts.jump++;
         if (mask & INPUT_ATTACK) counts.attack++;
-        if (mask & INPUT_BLOCK)  counts.block++;
 
         stepSimulation(sim, mask);
         pushReplayFrame(replay, sim);
@@ -455,10 +453,10 @@ function runAiIntegrationTest(options) {
 
     addCheck(
         'Self-play AI controls & combat',
-        counts.left > 0 && counts.right > 0 && counts.jump > 0 && counts.attack > 0 && counts.block > 0 &&
+        counts.left > 0 && counts.right > 0 && counts.jump > 0 && counts.attack > 0 &&
         sim.score > 0 && sim.enemiesDefeated > 0,
-        'score=' + sim.score + ' floor=' + sim.floor + ' KOs=' + sim.enemiesDefeated + ' parries=' + sim.parriesLanded +
-        ' L:' + counts.left + ' R:' + counts.right + ' J:' + counts.jump + ' A:' + counts.attack + ' B:' + counts.block
+        'score=' + sim.score + ' floor=' + sim.floor + ' KOs=' + sim.enemiesDefeated + ' deflects=' + sim.parriesLanded +
+        ' L:' + counts.left + ' R:' + counts.right + ' J:' + counts.jump + ' A:' + counts.attack
     );
     addCheck(
         'Per-tick bug invariants (NaN/bounds/HP)',

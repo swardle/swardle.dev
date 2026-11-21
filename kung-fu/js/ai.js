@@ -1,15 +1,14 @@
 // ============================================================================
 // kung-fu/js/ai.js - Deterministic AI Kung Fu Fighter
 //
-// Controls the player exclusively via the 5-bit input mask (LEFT, RIGHT, JUMP,
-// ATTACK, BLOCK). Used for the Title Screen Attract Demo, Watch AI Demo mode,
+// Controls the player exclusively via the 4-bit input mask (LEFT, RIGHT, JUMP,
+// ATTACK). Used for the Title Screen Attract Demo, Watch AI Demo mode,
 // and the automated AI Integration Test.
 // ============================================================================
 
 function createAiState() {
     return {
         attackCooldown: 0,
-        blockHoldLeft: 0,
         jumpCooldown: 0,
         retreatTicks: 0,
         retreatDir: 0,
@@ -22,7 +21,6 @@ function createAiState() {
 
 function resetAiState(ai) {
     ai.attackCooldown = 0;
-    ai.blockHoldLeft = 0;
     ai.jumpCooldown = 0;
     ai.retreatTicks = 0;
     ai.retreatDir = 0;
@@ -45,35 +43,40 @@ function computeAiInput(ai, simState) {
 
     var mask = INPUT_NONE;
 
-    // 1. Instant Crimson Counter right after landing a Perfect Parry!
-    if (p.parryCounterTimer > 0 && p.action !== 'parry' && ai.attackCooldown === 0) {
+    // 1. Instant Crimson Counter right after a sweet-spot star RETURN!
+    if (p.parryCounterTimer > 0 && ai.attackCooldown === 0 && !p.attackHeld) {
         ai.chargeHoldTicks = 0;
         ai.attackCooldown = 8;
         ai.lastMode = 'counter';
         return INPUT_ATTACK;
     }
 
-    // Continue brief block hold if actively guarding/parrying
-    if (ai.blockHoldLeft > 0) {
-        ai.chargeHoldTicks = 0;
-        ai.blockHoldLeft -= 1;
-        ai.lastMode = 'parry';
-        return INPUT_BLOCK;
-    }
-
-    // 2. Threat Scan: Incoming Projectiles (Parry or Jump!)
+    // 2. Threat Scan: Incoming Ninja Stars -> Mix Swinging to Deflect & Jumping Over!
     for (var pi = 0; pi < simState.projectiles.length; pi++) {
         var pr = simState.projectiles[pi];
         if (pr.owner !== 'enemy') continue;
         var pdx = pr.x - p.x;
+        var absPdx = Math.abs(pdx);
         var approaching = (pdx > 0 && pr.vx < 0) || (pdx < 0 && pr.vx > 0);
-        if (approaching && Math.abs(pdx) < 62) {
-            if (p.onGround) {
-                ai.chargeHoldTicks = 0;
-                ai.blockHoldLeft = 6;
-                ai.lastMode = 'parry';
-                return INPUT_BLOCK;
+        if (approaching && absPdx < 80) {
+            ai.chargeHoldTicks = 0;
+            var starDir = pdx >= 0 ? 1 : -1;
+            // ~1/3 of stars: leap cleanly over toward the thrower; ~2/3: swing to deflect!
+            if ((pr.id % 3 === 0) && p.onGround && ai.jumpCooldown === 0 && absPdx > 22 && absPdx < 74) {
+                ai.jumpCooldown = 28;
+                ai.lastMode = 'evade';
+                return INPUT_JUMP | (starDir > 0 ? INPUT_RIGHT : INPUT_LEFT);
             }
+            if (p.attackHeld) {
+                // Release held attack so next tick fires a fresh swing (or unleashes charged Hadouken!)
+                ai.lastMode = 'deflect';
+                return INPUT_NONE;
+            }
+            ai.attackCooldown = 6;
+            ai.lastMode = 'deflect';
+            return (p.facing !== starDir)
+                ? ((starDir > 0 ? INPUT_RIGHT : INPUT_LEFT) | INPUT_ATTACK)
+                : INPUT_ATTACK;
         }
     }
 
@@ -101,7 +104,7 @@ function computeAiInput(ai, simState) {
         }
     }
 
-    // 4. Threat Scan: Imminent Enemy Melee Strike -> Time a Perfect Parry!
+    // 4. Threat Scan: Imminent Enemy Melee Strikes & Boss Leaps -> Interrupt or Leap Clear!
     var nearest = null;
     var nearestDist = 999999;
     var leftCount = 0;
@@ -120,29 +123,28 @@ function computeAiInput(ai, simState) {
             nearest = en;
         }
 
-        if (en.state === 'windup' && en.attackStyle === 'melee' && absDx <= en.range + 30 && p.onGround) {
-            ai.chargeHoldTicks = 0;
-            if (en.stateDur - en.stateTick <= 10) {
-                ai.blockHoldLeft = 8;
-                ai.lastMode = 'parry';
-                return INPUT_BLOCK;
-            }
-            // Wait a beat instead of mashing into an enemy windup so we can land a Perfect Parry!
-            ai.lastMode = 'parry';
-            return (p.facing !== (dx >= 0 ? 1 : -1)) ? (dx >= 0 ? INPUT_RIGHT : INPUT_LEFT) : INPUT_NONE;
-        }
-        if (en.state === 'attack' && en.attackStyle === 'melee' && en.stateTick <= 4 &&
-            absDx <= en.range + 24 && p.onGround) {
-            ai.chargeHoldTicks = 0;
-            ai.blockHoldLeft = 5;
-            ai.lastMode = 'parry';
-            return INPUT_BLOCK;
-        }
         if (en.state === 'leap' && en.vy > 1.5 && absDx < 112 && p.onGround && ai.jumpCooldown === 0) {
             ai.chargeHoldTicks = 0;
             ai.jumpCooldown = 30;
             ai.lastMode = 'evade';
             return INPUT_JUMP | (dx >= 0 ? INPUT_LEFT : INPUT_RIGHT);
+        }
+        if ((en.state === 'windup' || en.state === 'attack') && en.attackStyle === 'melee' &&
+            absDx <= en.range + 22 && p.onGround) {
+            ai.chargeHoldTicks = 0;
+            var eDir = dx >= 0 ? 1 : -1;
+            if (absDx <= 86 && ai.attackCooldown === 0 && !p.attackHeld) {
+                ai.attackCooldown = 8;
+                ai.lastMode = 'combo';
+                return (p.facing !== eDir)
+                    ? ((eDir > 0 ? INPUT_RIGHT : INPUT_LEFT) | INPUT_ATTACK)
+                    : INPUT_ATTACK;
+            }
+            if (ai.jumpCooldown === 0) {
+                ai.jumpCooldown = 28;
+                ai.lastMode = 'evade';
+                return INPUT_JUMP | (eDir > 0 ? INPUT_LEFT : INPUT_RIGHT);
+            }
         }
     }
 

@@ -722,14 +722,10 @@ function drawFighterSilhouette(ctx, opts) {
 
 function drawPlayerFighter(ctx, p, tick) {
     var pose = p.action;
-    if (p.invulnTimer > 0 && p.action !== 'parry' && Math.floor(tick / 3) % 2 === 0 && p.action === 'hurt') {
+    if (p.invulnTimer > 0 && Math.floor(tick / 3) % 2 === 0 && p.action === 'hurt') {
         return; // brief hurt flicker
     }
-    var parryAura = null;
-    if (p.action === 'parry') parryAura = '#ffd24c';
-    else if (p.action === 'block') parryAura = 'rgba(255, 224, 150, 0.65)';
-    else if (p.parryCounterTimer > 0) parryAura = 'rgba(255, 184, 48, 0.55)';
-
+    var parryAura = p.parryCounterTimer > 0 ? 'rgba(255, 184, 48, 0.55)' : null;
     var chargeTicks = p.attackChargeTicks || 0;
     var rimColor = 'rgba(255, 235, 200, 0.42)';
     if (chargeTicks >= CHARGE_MAX_TICKS) rimColor = '#ffd24c';
@@ -1122,8 +1118,7 @@ function drawInputVisualizer(ctx, mask, dpr, topY) {
         { label: '◀',   bit: INPUT_LEFT,   onColor: '#ffe7b3' },
         { label: '▶',   bit: INPUT_RIGHT,  onColor: '#ffe7b3' },
         { label: 'JMP', bit: INPUT_JUMP,   onColor: '#7ff08f' },
-        { label: 'ATK', bit: INPUT_ATTACK, onColor: '#e6392e' },
-        { label: 'PRY', bit: INPUT_BLOCK,  onColor: '#ffd24c' }
+        { label: 'ATK', bit: INPUT_ATTACK, onColor: '#e6392e' }
     ];
     ctx.save();
     var h = Math.round(18 * dpr);

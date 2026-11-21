@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x34faf2ba'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0x3966a7af'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0x1ba3d538'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0x155d8c54'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -50,8 +50,8 @@ function runKungFuTestSuite() {
         }
     }
 
-    // 1. Input Sampling, Edge-Triggered Jump/Attack, Touch, & RLE Serialization
-    runCase('Input 5-bit mask, edge latches, touch, & RLE round-trip', function () {
+    // 1. Input Sampling, Edge-Triggered Jump, Charge-Hold Attack, Touch, & RLE Serialization
+    runCase('Input 4-bit mask, edge latches, touch, & RLE round-trip', function () {
         var live = createLiveInput();
         liveInputKeyDown(live, 'ArrowRight', 'ArrowRight', false);
         liveInputKeyDown(live, ' ', 'Space', false);
@@ -71,23 +71,23 @@ function runKungFuTestSuite() {
         kfAssert(m2b === INPUT_RIGHT, 'Expected RIGHT only after releasing attack, got ' + m2b);
 
         // Touch multi-button + clear
-        liveInputTouchButton(live, 'block', true);
+        liveInputTouchButton(live, 'jump', true);
         liveInputTouchButton(live, 'attack', true);
         var m3 = sampleLiveInput(live);
-        kfAssert(m3 === (INPUT_RIGHT | INPUT_BLOCK | INPUT_ATTACK), 'Expected touch combo mask, got ' + m3);
+        kfAssert(m3 === (INPUT_RIGHT | INPUT_JUMP | INPUT_ATTACK), 'Expected touch combo mask, got ' + m3);
 
         clearLiveInput(live);
         kfAssert(sampleLiveInput(live) === INPUT_NONE, 'clearLiveInput failed to reset state');
 
         var rec = createInputRecording({ seed: 999, viewWidth: 800, viewHeight: 450, tickRate: 60 });
-        rec.frames = [0, 2, 2, 2, 10, 16, 16, 4, 8, 0];
+        rec.frames = [0, 2, 2, 2, 10, 8, 8, 4, 8, 0];
         var json = serializeInputRecording(rec, null);
         var parsed = deserializeInputRecording(json);
         kfAssert(parsed.frames.length === rec.frames.length, 'RLE length mismatch');
         for (var i = 0; i < rec.frames.length; i++) {
             kfAssert(parsed.frames[i] === rec.frames[i], 'RLE mismatch at tick ' + i);
         }
-        return '5-bit masks + touch + RLE (' + json.length + ' bytes) OK';
+        return '4-bit masks + touch + RLE (' + json.length + ' bytes) OK';
     });
 
     // 2. 3-Hit Combo Chain, Jump Kick, & Enemy Defeat
@@ -123,39 +123,9 @@ function runKungFuTestSuite() {
         return '3-hit combo KO + airkick verified, score=' + sim.score;
     });
 
-    // 3. Perfect Parry Stuns Enemy & Deflects Thrown Knives
-    runCase('Perfect Parry stuns attacker & deflects thrown knives back', function () {
-        var sim = createSimState({ seed: 202, viewWidth: 800, viewHeight: 450, tickRate: 60 });
-        sim.enemies = [];
-        sim.player.x = 220;
-        sim.player.facing = 1;
-        var thrower = spawnEnemy(sim, 'knife', 340, -1);
-        thrower.cooldown = 999;
-
-        // Place an enemy knife right in front of the player moving left
-        sim.projectiles.push({
-            id: allocEntityId(sim),
-            x: 242, y: GROUND_Y - 46,
-            vx: -7.0, vy: 0,
-            owner: 'enemy', damage: 12, spin: 0, life: 80
-        });
-
-        // Press BLOCK right as knife hits -> Perfect Parry!
-        stepSimulation(sim, INPUT_BLOCK);
-        kfAssert(sim.parriesLanded === 1, 'Expected 1 perfect parry, got ' + sim.parriesLanded);
-        kfAssert(sim.player.parryCounterTimer > 0, 'Expected parryCounterTimer > 0');
-        kfAssert(sim.projectiles.length === 1 && sim.projectiles[0].owner === 'player' && sim.projectiles[0].vx > 0,
-            'Expected parried knife deflected back right as player projectile');
-
-        // Let deflected knife fly back and strike the thrower
-        for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
-        kfAssert(thrower.hp < thrower.maxHp || sim.enemies.length === 0, 'Deflected knife did not damage enemy');
-        return 'parries=' + sim.parriesLanded + ' deflected knife hit enemy';
-    });
-
-    // 3a. Attacking an Incoming Ninja Star Blocks or Deflects It Back at the Thrower
-    runCase('Attacking incoming ninja star blocks or deflects it back at thrower', function () {
-        // Case A: Sweet-spot attack deflects the star straight back into the ninja who threw it
+    // 3. Swing Line Deflects Ninja Stars by Timing (Tick-0 Save, Sweet-Spot Return, Upward Arc, & Floor-Skip Ricochet)
+    runCase('Swing line deflects ninja stars by timing (return, upward arc, & tile/enemy hits)', function () {
+        // Case A: Tick-0 immediate reaction press when star is right in front -> sweet-spot RETURN into thrower!
         var sim = createSimState({ seed: 250, viewWidth: 800, viewHeight: 450, tickRate: 60 });
         sim.enemies = [];
         sim.player.x = 220;
@@ -163,53 +133,76 @@ function runKungFuTestSuite() {
         var ninja = spawnEnemy(sim, 'knife', 380, -1);
         ninja.cooldown = 999;
 
-        // Start attack1 so actionTick reaches spec.start (4) right when star enters hitbox
-        stepSimulation(sim, INPUT_ATTACK);
-        stepSimulation(sim, INPUT_NONE);
-        stepSimulation(sim, INPUT_NONE);
-        stepSimulation(sim, INPUT_NONE);
-        // Spawn incoming ninja star right in front of the player's strike
         sim.projectiles.push({
             id: allocEntityId(sim), kind: 'knife',
-            x: 268, y: GROUND_Y - 46, vx: -6.5, vy: 0,
+            x: 266, y: GROUND_Y - 46, vx: -6.5, vy: 0,
             owner: 'enemy', sourceEnemyId: ninja.id, damage: 11, spin: 0, life: 80
         });
-        stepSimulation(sim, INPUT_NONE);
+        // Press ATTACK on the exact tick the star enters center of swing!
+        stepSimulation(sim, INPUT_ATTACK);
 
-        kfAssert(sim.player.hp === sim.player.maxHp, 'Player should take no damage when swatting ninja star');
+        kfAssert(sim.player.hp === sim.player.maxHp, 'Player should take no damage on tick-0 attack deflection');
         kfAssert(sim.projectiles.length === 1 && sim.projectiles[0].owner === 'player' && sim.projectiles[0].vx > 0,
-            'Expected sweet-spot attack to deflect ninja star back toward thrower');
+            'Expected tick-0 sweet-spot swing to return ninja star toward thrower');
 
         for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
         kfAssert(ninja.hp < ninja.maxHp || sim.enemies.length === 0,
-            'Deflected ninja star did not hit the ninja who threw it');
+            'Returned ninja star did not hit the ninja who threw it');
 
-        // Case B: Early-frame strikes block/destroy or sometimes deflect across multiple seeds
-        var blockedCount = 0;
-        var deflectedCount = 0;
-        for (var s = 1; s <= 12; s++) {
-            var simB = createSimState({ seed: 500 + s, viewWidth: 800, viewHeight: 450, tickRate: 60 });
-            simB.enemies = [];
-            simB.player.x = 220;
-            simB.player.facing = 1;
-            var nB = spawnEnemy(simB, 'knife', 390, -1);
-            nB.cooldown = 999;
+        // Case B: Early tip-of-swing swipe sends star UPWARD in a gravity arc and can shatter a falling roof tile!
+        var simUp = createSimState({ seed: 251, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simUp.enemies = [];
+        simUp.player.x = 220;
+        simUp.player.facing = 1;
+        simUp.projectiles.push({
+            id: allocEntityId(simUp), kind: 'knife',
+            x: 298, y: GROUND_Y - 46, vx: -6.5, vy: 0,
+            owner: 'enemy', damage: 11, spin: 0, life: 80
+        });
+        stepSimulation(simUp, INPUT_ATTACK);
+        kfAssert(simUp.projectiles.length === 1 && simUp.projectiles[0].owner === 'player' &&
+            simUp.projectiles[0].vy < -5 && simUp.projectiles[0].gravity > 0,
+            'Expected early tip-of-swing to ricochet star upward with arc gravity');
 
-            stepSimulation(simB, INPUT_ATTACK);
-            simB.projectiles.push({
-                id: allocEntityId(simB), kind: 'knife',
-                x: 260, y: GROUND_Y - 46, vx: -6.5, vy: 0,
-                owner: 'enemy', sourceEnemyId: nB.id, damage: 11, spin: 0, life: 80
+        // Put a falling roof tile directly along its upward path
+        var upPr = simUp.projectiles[0];
+        simUp.traps.push({
+            id: allocEntityId(simUp), kind: 'tile',
+            x: upPr.x + upPr.vx * 3, y: upPr.y + upPr.vy * 3 + 2,
+            vx: 0, vy: 1, angle: 0, telegraph: 0, active: true, life: 90
+        });
+        var scoreBeforeTile = simUp.score;
+        for (var u = 0; u < 6; u++) stepSimulation(simUp, INPUT_NONE);
+        kfAssert(simUp.traps.length === 0 && simUp.score > scoreBeforeTile,
+            'Upward ricocheted star should shatter falling roof tile in midair');
+
+        // Case C: Close-range / late swipes produce varied directions including downward floor-skip bounces
+        var upwardCount = 0;
+        var bounceCount = 0;
+        for (var s = 1; s <= 15; s++) {
+            var simC = createSimState({ seed: 600 + s, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+            simC.enemies = [];
+            simC.player.x = 220;
+            simC.player.facing = 1;
+            simC.projectiles.push({
+                id: allocEntityId(simC), kind: 'knife',
+                x: 236, y: GROUND_Y - 46, vx: -6.5, vy: 0,
+                owner: 'enemy', damage: 11, spin: 0, life: 80
             });
-            stepSimulation(simB, INPUT_NONE);
-            kfAssert(simB.player.hp === simB.player.maxHp, 'Player took damage on early-frame swat (seed ' + s + ')');
-            if (simB.projectiles.length === 0) blockedCount++;
-            else if (simB.projectiles[0].owner === 'player' && simB.projectiles[0].vx > 0) deflectedCount++;
+            stepSimulation(simC, INPUT_ATTACK);
+            kfAssert(simC.player.hp === simC.player.maxHp, 'Player took damage on close-range swipe (seed ' + s + ')');
+            var cPr = simC.projectiles[0];
+            kfAssert(cPr && cPr.owner === 'player', 'Close-range swipe failed to deflect star');
+            if (cPr.vy < -3) upwardCount++;
+            if (cPr.vy > 0) {
+                for (var b = 0; b < 15; b++) stepSimulation(simC, INPUT_NONE);
+                if (cPr.bounced) bounceCount++;
+            }
         }
-        kfAssert(blockedCount > 0 && deflectedCount > 0,
-            'Expected mix of blocks and deflections on early swipes (blocked=' + blockedCount + ', deflected=' + deflectedCount + ')');
+        kfAssert(upwardCount > 0 && bounceCount > 0,
+            'Expected varied close-range deflection angles (up=' + upwardCount + ', floorBounces=' + bounceCount + ')');
 
-        return 'sweet-spot reflect hit thrower + early swipes (' + blockedCount + ' blocks, ' + deflectedCount + ' reflects)';
+        return 'tick-0 return + upward tile break + varied angles (' + upwardCount + ' up, ' + bounceCount + ' floor bounces)';
     });
 
     // 3b. Charged Street Fighter Power Ball (Hadouken) Launch, Knife Clash, & Super Pierce
