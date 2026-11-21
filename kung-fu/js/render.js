@@ -185,14 +185,28 @@ function renderGameFrame(ctx, canvasW, canvasH, frame, opts) {
         drawEnemyFighter(ctx, frame.enemies[ei], frame.tick);
     }
 
+    // Shadow Clone Afterimages (Shadow Ronin Tier 1+)
+    if (frame.afterimages && frame.afterimages.length > 0) {
+        for (var ai = 0; ai < frame.afterimages.length; ai++) {
+            drawAfterimageClone(ctx, frame.afterimages[ai], frame.tick);
+        }
+    }
+
     // Player Fighter
     if (frame.player) {
-        drawPlayerFighter(ctx, frame.player, frame.tick);
+        drawPlayerFighter(ctx, frame.player, frame.tick, frame.streakTier || 0);
     }
 
     // Thrown Knives / Projectiles
     for (var pi = 0; pi < frame.projectiles.length; pi++) {
         drawProjectile(ctx, frame.projectiles[pi]);
+    }
+
+    // Chain-Lightning Bolts (Thunder Monk Tier 1+)
+    if (frame.bolts && frame.bolts.length > 0) {
+        for (var bi = 0; bi < frame.bolts.length; bi++) {
+            drawLightningBolt(ctx, frame.bolts[bi], frame.tick);
+        }
     }
 
     // Brush Slash Arcs
@@ -467,6 +481,32 @@ function drawFighterSilhouette(ctx, opts) {
         rFootX = 22; lFootX = -18;
         fElbowX = 24; fElbowY = -68; fHandX = 38; fHandY = -86;
         bElbowX = -8; bElbowY = -46; bHandX = -16; bHandY = -38;
+    } else if (pose === 'dragon_upper') {
+        // Soaring Blazing Shoryuken Uppercut!
+        torsoLean = 8;
+        hipY = -42; shoulderX = 8; shoulderY = -68; headX = 10; headY = -81;
+        lKneeX = -10; lKneeY = -22; lFootX = -14; lFootY = -6;
+        rKneeX = 16;  rKneeY = -34; rFootX = 12;  rFootY = -18;
+        fElbowX = 18; fElbowY = -84; fHandX = 22; fHandY = -106;
+        bElbowX = -10; bElbowY = -56; bHandX = -18; bHandY = -44;
+    } else if (pose === 'divekick') {
+        // Blazing Diagonal Meteor Dive Kick!
+        torsoLean = -18;
+        hipY = -36; shoulderX = -18; shoulderY = -54; headX = -22; headY = -66;
+        lKneeX = -12; lKneeY = -24; lFootX = -22; lFootY = -18;
+        rKneeX = 18;  rKneeY = -22; rFootX = 42;  rFootY = -4;
+        fElbowX = -2; fElbowY = -48; fHandX = 14; fHandY = -44;
+        bElbowX = -28; bElbowY = -50; bHandX = -38; bHandY = -42;
+    } else if (pose === 'spin') {
+        // 360° Hurricane Spin Kick! Alternates spin direction cleanly with actionTick
+        var spinCos = Math.cos((opts.actionTick || 0) * 0.95);
+        var ext = spinCos >= 0 ? 1 : -1;
+        torsoLean = -ext * 6;
+        hipY = -37; shoulderX = torsoLean; shoulderY = -59; headX = torsoLean * 0.8; headY = -72;
+        lKneeX = -ext * 8; lKneeY = -20; lFootX = -ext * 6; lFootY = -2;
+        rKneeX = ext * 22; rKneeY = -42; rFootX = ext * 46; rFootY = -44;
+        fElbowX = ext * 16; fElbowY = -54; fHandX = ext * 28; fHandY = -50;
+        bElbowX = -ext * 16; bElbowY = -54; bHandX = -ext * 28; bHandY = -50;
     } else if (pose === 'airkick') {
         // Classic Flying Kung-Fu Jump Kick!
         hipY = -36; shoulderX = -10; shoulderY = -56; headX = -12; headY = -68;
@@ -717,20 +757,92 @@ function drawFighterSilhouette(ctx, opts) {
         }
     }
 
+    // Streak Tier 1 / Tier 2 Blazing Chi Aura around Fighter!
+    if (opts.streakTier && opts.streakTier >= 1 && opts.streakAuraColor) {
+        ctx.save();
+        var sPulse = 0.55 + Math.sin(phase * 3.0) * 0.25;
+        ctx.globalAlpha = opts.streakTier >= 2 ? 0.85 : 0.55;
+        ctx.strokeStyle = opts.streakAuraColor;
+        ctx.lineWidth = opts.streakTier >= 2 ? 2.6 : 1.8;
+        var gR = (opts.streakTier >= 2 ? 28 : 22) + sPulse * 6;
+        ctx.beginPath();
+        ctx.ellipse(0, 1, gR, 5.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (opts.streakTier >= 2) {
+            ctx.beginPath();
+            ctx.arc(0, -44, 34 + sPulse * 4, phase * 1.4, phase * 1.4 + 2.2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(0, -44, 34 + sPulse * 4, phase * 1.4 + Math.PI, phase * 1.4 + Math.PI + 2.2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     ctx.restore();
 }
 
-function drawPlayerFighter(ctx, p, tick) {
+function drawAfterimageClone(ctx, af, tick) {
+    var alpha = Math.max(0.12, (af.life / (af.maxLife || 16)) * 0.52);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    drawFighterSilhouette(ctx, {
+        x: af.x,
+        y: af.y,
+        facing: af.facing,
+        scale: 1.04,
+        pose: af.pose || 'attack1',
+        phase: tick * 0.14,
+        flash: false,
+        rimColor: '#ff5247',
+        headbandColor: '#ff5247',
+        actionTick: 6
+    });
+    ctx.restore();
+}
+
+function drawLightningBolt(ctx, bl, tick) {
+    var alpha = Math.max(0, bl.life / (bl.maxLife || 12));
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = bl.color || '#8ef4ff';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bl.x1, bl.y1);
+    var segs = 5;
+    for (var i = 1; i < segs; i++) {
+        var t = i / segs;
+        var mx = bl.x1 + (bl.x2 - bl.x1) * t;
+        var my = bl.y1 + (bl.y2 - bl.y1) * t + Math.sin(tick * 2.3 + bl.id + i * 2.7) * 14;
+        ctx.lineTo(mx, my);
+    }
+    ctx.lineTo(bl.x2, bl.y2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawPlayerFighter(ctx, p, tick, streakTier) {
     var pose = p.action;
     if (p.invulnTimer > 0 && Math.floor(tick / 3) % 2 === 0 && p.action === 'hurt') {
         return; // brief hurt flicker
     }
+    var fighter = (typeof getFighterSpec === 'function')
+        ? getFighterSpec(p.fighterId)
+        : { id: 'shadow', headband: '#e62e25', accent: '#ff5247' };
+    var tier = streakTier || 0;
     var parryAura = p.parryCounterTimer > 0 ? 'rgba(255, 184, 48, 0.55)' : null;
     var chargeTicks = p.attackChargeTicks || 0;
     var rimColor = 'rgba(255, 235, 200, 0.42)';
     if (chargeTicks >= CHARGE_MAX_TICKS) rimColor = '#ffd24c';
     else if (chargeTicks >= CHARGE_VISUAL_TICKS) rimColor = '#38d9ff';
     else if (p.parryCounterTimer > 0) rimColor = '#ffd24c';
+    else if (tier >= 2) rimColor = fighter.accent;
+    else if (tier >= 1) rimColor = fighter.headband;
 
     drawFighterSilhouette(ctx, {
         x: p.x,
@@ -741,11 +853,42 @@ function drawPlayerFighter(ctx, p, tick) {
         phase: (pose === 'run') ? p.walkCycle : (tick * 0.12),
         flash: p.flashTimer > 0,
         rimColor: rimColor,
-        headbandColor: '#e62e25',
+        headbandColor: fighter.headband,
         parryAura: parryAura,
         chargeTicks: chargeTicks,
-        actionTick: p.actionTick || 0
+        actionTick: p.actionTick || 0,
+        streakTier: tier,
+        streakAuraColor: fighter.accent
     });
+
+    // Lotus Blade Orbiting Jade Ink Blades (Tier 1: 2 blades, Tier 2: 3 blades)
+    if (fighter.id === 'lotus' && tier >= 1 && p.alive) {
+        var bCount = tier >= 2 ? 3 : 2;
+        var baseAng = p.orbitAngle || 0;
+        for (var bi = 0; bi < bCount; bi++) {
+            var a = baseAng + (bi * Math.PI * 2 / bCount);
+            var bx = p.x + Math.cos(a) * 56;
+            var by = (p.y - 44) + Math.sin(a) * 34;
+            ctx.save();
+            ctx.translate(bx, by);
+            ctx.rotate(tick * 0.35 + bi);
+            ctx.shadowColor = '#36e68a';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#7dffba';
+            ctx.strokeStyle = '#0d261a';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            for (var sp = 0; sp < 3; sp++) {
+                var sa = sp * (Math.PI * 2 / 3);
+                ctx.lineTo(Math.cos(sa) * 12, Math.sin(sa) * 12);
+                ctx.lineTo(Math.cos(sa + 0.6) * 4, Math.sin(sa + 0.6) * 4);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
 }
 
 function drawEnemyFighter(ctx, e, tick) {
@@ -852,6 +995,49 @@ function drawProjectile(ctx, pr) {
             ctx.moveTo(-8, -26); ctx.lineTo(8, -26);
             ctx.stroke();
         }
+        ctx.restore();
+        return;
+    }
+
+    if (pr.kind === 'crescent') {
+        var cDir = pr.vx >= 0 ? 1 : -1;
+        var cr = pr.radius || 24;
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        ctx.scale(cDir, 1);
+        ctx.shadowColor = pr.color || '#ff5247';
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = pr.color || '#ff5247';
+        ctx.lineWidth = 9;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(-8, 0, cr, -1.15, 1.15);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff3d6';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
+    if (pr.kind === 'jade_blade') {
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        ctx.rotate(pr.spin);
+        ctx.shadowColor = '#36e68a';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#7dffba';
+        ctx.strokeStyle = '#0c2618';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        for (var jb = 0; jb < 3; jb++) {
+            var ja = jb * (Math.PI * 2 / 3);
+            ctx.lineTo(Math.cos(ja) * 13, Math.sin(ja) * 13);
+            ctx.lineTo(Math.cos(ja + 0.6) * 4, Math.sin(ja + 0.6) * 4);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
         ctx.restore();
         return;
     }
@@ -1029,6 +1215,26 @@ function drawSlashArc(ctx, sl) {
     ctx.strokeStyle = sl.color;
     ctx.lineCap = 'round';
 
+    if (sl.style === 'spin') {
+        // Full 360° circular hurricane defense brush rings!
+        var sr = 58 + prog * 28;
+        var spinRot = prog * Math.PI * 2.2;
+        ctx.lineWidth = 10 * (1 - prog * 0.45);
+        ctx.beginPath();
+        ctx.arc(0, 0, sr, spinRot, spinRot + Math.PI * 1.65);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, sr * 0.72, spinRot + Math.PI, spinRot + Math.PI * 2.45);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff3d6';
+        ctx.lineWidth = Math.max(1.8, ctx.lineWidth * 0.32);
+        ctx.beginPath();
+        ctx.arc(0, 0, sr, spinRot + 0.1, spinRot + Math.PI * 1.45);
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
     var r = sl.style === 'counter' ? 68 : (sl.style === 'upper' ? 54 : 42);
     ctx.lineWidth = (sl.style === 'counter' ? 12 : 8) * (1 - prog * 0.5);
     ctx.beginPath();
@@ -1101,10 +1307,15 @@ function drawHud(ctx, frame, viewW) {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(barX - 3, barY - 3, barW + 6, barH + 6);
 
+    var fSpec = (typeof getFighterSpec === 'function')
+        ? getFighterSpec(p.fighterId || frame.fighterId)
+        : { shortName: 'RONIN', headband: '#e62e25', accent: '#ff5247', tier1Name: 'CLONE', tier2Name: 'WAVE' };
+    var sTier = frame.streakTier || 0;
+
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#f5ead6';
     ctx.textAlign = 'left';
-    ctx.fillText('HP ' + p.hp + '/' + p.maxHp + '   FLOOR ' + frame.floor, barX, barY - 8);
+    ctx.fillText('HP ' + p.hp + '/' + p.maxHp + '  •  FL ' + frame.floor + '  •  ' + fSpec.shortName, barX, barY - 8);
 
     // Street Fighter Chi Charge Bar directly beneath HP bar when charging
     var cTicks = p.attackChargeTicks || 0;
@@ -1134,15 +1345,18 @@ function drawHud(ctx, frame, viewW) {
         ctx.fillText(cIsMax ? 'SUPER HADOU READY!' : (cIsReady ? 'HADOU READY! (RELEASE)' : 'CHARGING CHI...'), barX, cBarY + cBarH + 12);
     }
 
-    // Score & Combo (Top Center)
+    // Score & Combo + Live Streak Power-Up Badge (Top Center)
     ctx.textAlign = 'center';
     ctx.font = 'bold 15px monospace';
     ctx.fillStyle = '#ffe7b3';
     ctx.fillText('SCORE ' + frame.score, viewW * 0.5, 24);
     if (frame.comboCount >= 2) {
         ctx.font = 'bold 13px Georgia, serif';
-        ctx.fillStyle = '#ffd24c';
-        ctx.fillText(frame.comboCount + ' HIT COMBO', viewW * 0.5, 42);
+        ctx.fillStyle = sTier >= 1 ? fSpec.accent : '#ffd24c';
+        var comboLabel = frame.comboCount + ' HIT COMBO';
+        if (sTier >= 2) comboLabel += '  ★ ' + fSpec.tier2Name;
+        else if (sTier >= 1) comboLabel += '  • ' + fSpec.tier1Name;
+        ctx.fillText(comboLabel, viewW * 0.5, 42);
     }
 
     // Active Floor Boss HP Bar (Bottom-ish Top Center)

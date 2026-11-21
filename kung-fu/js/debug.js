@@ -47,8 +47,10 @@ function hashSimState(state) {
     h = fnv1aMixUint32(h, state.tick);
     h = fnv1aMixUint32(h, state.rng.state);
     h = fnv1aMixUint32(h, state.nextEntityId);
+    h = fnv1aMixString(h, (state.setup && state.setup.fighterId) || 'shadow');
     h = fnv1aMixUint32(h, state.score);
     h = fnv1aMixUint32(h, state.comboCount);
+    h = fnv1aMixUint32(h, state.streakTier || 0);
     h = fnv1aMixUint32(h, state.parriesLanded);
     h = fnv1aMixUint32(h, state.enemiesDefeated);
     h = fnv1aMixUint32(h, state.floor);
@@ -72,11 +74,15 @@ function hashSimState(state) {
         h = fnv1aMixString(h, p.action);
         h = fnv1aMixUint32(h, p.actionTick);
         h = fnv1aMixUint32(h, p.comboStep);
+        h = fnv1aMixUint32(h, p.turnWindow || 0);
+        h = fnv1aMixUint32(h, p.spinCooldown || 0);
         h = fnv1aMixUint32(h, p.parryCounterTimer);
         h = fnv1aMixUint32(h, p.attackHeld ? 1 : 0);
         h = fnv1aMixUint32(h, p.attackChargeTicks);
         h = fnv1aMixUint32(h, p.invulnTimer);
     }
+
+    h = fnv1aMixUint32(h, (state.afterimages && state.afterimages.length) || 0);
 
     h = fnv1aMixUint32(h, state.enemies.length);
     for (var i = 0; i < state.enemies.length; i++) {
@@ -377,7 +383,9 @@ function runSelfPlayBugHunt(seeds, ticksPerSeed) {
     var maxFloor = 1;
 
     for (var i = 0; i < seedList.length; i++) {
-        var res = runAiIntegrationTest({ seed: seedList[i], ticks: ticks });
+        var fId = (typeof FIGHTERS !== 'undefined' && FIGHTERS.length > 0)
+            ? FIGHTERS[i % FIGHTERS.length].id : 'shadow';
+        var res = runAiIntegrationTest({ seed: seedList[i], ticks: ticks, fighterId: fId });
         if (!res.ok) {
             return {
                 ok: false,
@@ -408,7 +416,8 @@ function runAiIntegrationTest(options) {
         seed: seed,
         viewWidth: WORLD_VIEW_W,
         viewHeight: WORLD_VIEW_H,
-        tickRate: SIM_TICK_RATE
+        tickRate: SIM_TICK_RATE,
+        fighterId: opts.fighterId || 'shadow'
     };
 
     var t0 = (typeof performance !== 'undefined') ? performance.now() : Date.now();

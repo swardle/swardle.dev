@@ -10,6 +10,9 @@
     var messageOverlay    = document.getElementById('message-overlay');
     var messageTitle      = document.getElementById('message-title');
     var messageText       = document.getElementById('message-text');
+    var fighterPicker     = document.getElementById('fighter-picker');
+    var fighterCardsWrap  = document.getElementById('fighter-cards');
+    var fighterSkillDesc  = document.getElementById('fighter-skill-desc');
     var startButton       = document.getElementById('start-button');
     var demoButton        = document.getElementById('demo-button');
     var gameoverReplayBtn = document.getElementById('gameover-replay-btn');
@@ -71,6 +74,7 @@
     var canvasDpr       = 1;
     var isMobileDevice  = false;
     var appMode         = 'title'; // 'title', 'demo', 'playing', 'paused', 'gameover', 'replay'
+    var selectedFighterId = 'shadow';
     var menuOpen        = false;
     var modeBeforeReplay = 'playing';
 
@@ -117,12 +121,65 @@
         }
     }
 
-    function buildSetup(seed) {
+    function renderFighterPicker(visible) {
+        if (!fighterPicker) return;
+        fighterPicker.style.display = visible ? 'flex' : 'none';
+        if (!visible) return;
+        var spec = getFighterSpec(selectedFighterId);
+        if (fighterCardsWrap) {
+            var btns = fighterCardsWrap.querySelectorAll('.fighter-card');
+            for (var i = 0; i < btns.length; i++) {
+                var fid = btns[i].getAttribute('data-fighter');
+                if (fid === spec.id) btns[i].classList.add('selected');
+                else btns[i].classList.remove('selected');
+            }
+        }
+        if (fighterSkillDesc) {
+            fighterSkillDesc.style.color = spec.accent;
+            fighterSkillDesc.style.borderColor = spec.headband;
+            fighterSkillDesc.textContent = spec.name + ' — ' + spec.desc;
+        }
+    }
+
+    function selectFighter(fighterId) {
+        var spec = getFighterSpec(fighterId);
+        selectedFighterId = spec.id;
+        renderFighterPicker(appMode === 'title' || appMode === 'gameover');
+        if (appMode === 'title' && simState && simState.player) {
+            simState.setup.fighterId = spec.id;
+            simState.player.fighterId = spec.id;
+        }
+    }
+
+    function initFighterPickerDom() {
+        if (!fighterCardsWrap || typeof FIGHTERS === 'undefined') return;
+        fighterCardsWrap.innerHTML = '';
+        for (var i = 0; i < FIGHTERS.length; i++) {
+            (function (f, idx) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'fighter-card';
+                btn.setAttribute('data-fighter', f.id);
+                btn.style.setProperty('--fighter-color', f.headband);
+                btn.title = (idx + 1) + ': ' + f.name + ' (' + f.desc + ')';
+                btn.innerHTML =
+                    '<span class="fc-head"><span class="fc-dot"></span>' + (idx + 1) + '. ' + f.shortName + '</span>' +
+                    '<span class="fc-tag">' + f.tag + '</span>';
+                btn.addEventListener('click', function () {
+                    selectFighter(f.id);
+                });
+                fighterCardsWrap.appendChild(btn);
+            })(FIGHTERS[i], i);
+        }
+    }
+
+    function buildSetup(seed, fighterId) {
         return {
             seed: seed >>> 0,
             viewWidth: WORLD_VIEW_W,
             viewHeight: WORLD_VIEW_H,
-            tickRate: SIM_TICK_RATE
+            tickRate: SIM_TICK_RATE,
+            fighterId: getFighterSpec(fighterId || selectedFighterId).id
         };
     }
 
@@ -134,7 +191,7 @@
         var demoSeed = (0xD3000001 + demoMatchCounter) >>> 0;
         demoMatchCounter++;
 
-        var setup = buildSetup(demoSeed);
+        var setup = buildSetup(demoSeed, selectedFighterId);
         simState = createSimState(setup);
         startInputAi(inputCtrl, setup, aiState, computeAiInput);
         clearReplayBuffer(replayBuf);
@@ -150,9 +207,10 @@
             appMode = 'title';
             messageTitle.textContent = 'SHADOW PAGODA';
             messageText.innerHTML =
-                'A / D or Arrows: Move &bull; W / Up: Jump<br>' +
-                'Space / J: Strike (3-Hit Combo &amp; Jump Kick) &bull; Shift / K: Block &amp; Parry<br>' +
-                'P: Pause &bull; R: Replay &bull; Esc: Menu';
+                'A / D or Arrows: Move &bull; W / Up: Jump (Cancels Attacks)<br>' +
+                'Space / J: Strike (Hold: Power Ball &bull; Flip Dir + Strike: 360&deg; Spin)<br>' +
+                'Pick your Fighter (1-5) &bull; P: Pause &bull; R: Replay &bull; Esc: Menu';
+            renderFighterPicker(true);
             startButton.style.display = 'inline-block';
             startButton.textContent = 'Start Game';
             demoButton.style.display = 'inline-block';
@@ -162,6 +220,7 @@
         } else {
             ensureAudioStarted(audio);
             appMode = 'demo';
+            renderFighterPicker(false);
             messageOverlay.style.display = 'none';
         }
 
@@ -240,7 +299,9 @@
         messageText.innerHTML =
             'FINAL SCORE: ' + simState.score +
             '<br>FLOOR ' + simState.floor + ' &bull; KOs: ' + simState.enemiesDefeated +
-            ' &bull; PARRIES: ' + simState.parriesLanded + suffix;
+            ' &bull; MAX COMBO: ' + (simState.maxCombo || 0) +
+            ' &bull; DEFLECTS: ' + simState.parriesLanded + suffix;
+        renderFighterPicker(true);
         startButton.style.display = 'inline-block';
         startButton.textContent = 'Fight Again';
         demoButton.style.display = 'none';
@@ -259,6 +320,7 @@
             clearLiveInput(liveInput);
             messageTitle.textContent = 'PAUSED';
             messageText.innerHTML = "Press 'P' to Resume &bull; 'R' for Replay";
+            renderFighterPicker(false);
             startButton.style.display = 'none';
             demoButton.style.display = 'none';
             gameoverReplayBtn.style.display = 'none';
@@ -760,6 +822,7 @@
                         : '<br><span style="color:#7f7">DETERMINISM OK (' + formatHexHash(devLogger.lastHash) + ')</span>';
                 }
                 messageText.innerHTML = 'SCORE: ' + simState.score + ' &bull; FLOOR ' + simState.floor + extra;
+                renderFighterPicker(false);
                 startButton.style.display = 'inline-block';
                 startButton.textContent = 'New Live Game';
                 demoButton.style.display = 'none';
@@ -892,6 +955,14 @@
                 }
                 return;
             }
+            if ((appMode === 'title' || appMode === 'gameover') && !e.repeat &&
+                e.key >= '1' && e.key <= '5' && typeof FIGHTERS !== 'undefined') {
+                var fIdx = parseInt(e.key, 10) - 1;
+                if (FIGHTERS[fIdx]) {
+                    selectFighter(FIGHTERS[fIdx].id);
+                    return;
+                }
+            }
             if ((appMode === 'demo' || appMode === 'title') && e.key === 'Enter' && !e.repeat) {
                 e.preventDefault();
                 startNewLiveGame();
@@ -996,6 +1067,7 @@
         if (devLogger.enabled) {
             hudMenuBtn.textContent = 'MENU [DEV]';
         }
+        initFighterPickerDom();
         startDemoLoop(true);
     }
 

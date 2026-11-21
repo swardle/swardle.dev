@@ -64,6 +64,7 @@ function captureRenderFrame(simState, inputMask, stepResult) {
             id: pr.id, kind: pr.kind || 'knife', x: pr.x, y: pr.y, vx: pr.vx,
             owner: pr.owner, spin: pr.spin,
             radius: pr.radius || 11, power: pr.power || 0,
+            color: pr.color || null,
             enemyKind: pr.enemyKind || null, scale: pr.scale || 1.0
         };
     }
@@ -104,15 +105,37 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         };
     }
 
+    var srcAfter = simState.afterimages || [];
+    var afterimages = new Array(srcAfter.length);
+    for (var a = 0; a < srcAfter.length; a++) {
+        var af = srcAfter[a];
+        afterimages[a] = {
+            id: af.id, x: af.x, y: af.y, facing: af.facing,
+            pose: af.pose, life: af.life, maxLife: af.maxLife
+        };
+    }
+
+    var srcBolts = simState.bolts || [];
+    var bolts = new Array(srcBolts.length);
+    for (var b = 0; b < srcBolts.length; b++) {
+        var bl = srcBolts[b];
+        bolts[b] = {
+            id: bl.id, x1: bl.x1, y1: bl.y1, x2: bl.x2, y2: bl.y2,
+            color: bl.color, life: bl.life, maxLife: bl.maxLife
+        };
+    }
+
     return {
         tick: simState.tick,
         inputMask: (typeof inputMask === 'number') ? (inputMask | 0) : 0,
         marker: classifyReplayMarker(stepResult),
         viewWidth: simState.setup.viewWidth,
         viewHeight: simState.setup.viewHeight,
+        fighterId: (simState.setup && simState.setup.fighterId) || 'shadow',
         floor: simState.floor,
         score: simState.score,
         comboCount: simState.comboCount,
+        streakTier: simState.streakTier || 0,
         parriesLanded: simState.parriesLanded,
         cameraX: simState.cameraX,
         screenShake: simState.screenShake,
@@ -121,12 +144,14 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         goPromptTimer: simState.goPromptTimer,
         isGameOver: simState.isGameOver,
         player: p ? {
-            id: p.id, x: p.x, y: p.y, vx: p.vx, vy: p.vy,
+            id: p.id, fighterId: p.fighterId || 'shadow',
+            x: p.x, y: p.y, vx: p.vx, vy: p.vy,
             facing: p.facing, onGround: p.onGround,
             hp: p.hp, maxHp: p.maxHp, alive: p.alive,
             action: p.action, actionTick: p.actionTick, actionDuration: p.actionDuration,
             parryCounterTimer: p.parryCounterTimer, invulnTimer: p.invulnTimer,
             attackChargeTicks: p.attackChargeTicks || 0,
+            orbitAngle: p.orbitAngle || 0,
             walkCycle: p.walkCycle, flashTimer: p.flashTimer
         } : null,
         enemies: enemies,
@@ -134,7 +159,9 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         traps: traps,
         particles: particles,
         slashes: slashes,
-        callouts: callouts
+        callouts: callouts,
+        afterimages: afterimages,
+        bolts: bolts
     };
 }
 
@@ -225,6 +252,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         var p1 = f1.player;
         bp = {
             id: p0.id,
+            fighterId: p0.fighterId || 'shadow',
             x: lerp(p0.x, p1.x, alpha),
             y: lerp(p0.y, p1.y, alpha),
             vx: lerp(p0.vx, p1.vx, alpha),
@@ -240,6 +268,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
             parryCounterTimer: hud.player.parryCounterTimer,
             invulnTimer: hud.player.invulnTimer,
             attackChargeTicks: lerp(p0.attackChargeTicks || 0, p1.attackChargeTicks || 0, alpha),
+            orbitAngle: lerp(p0.orbitAngle || 0, p1.orbitAngle || 0, alpha),
             walkCycle: lerp(p0.walkCycle, p1.walkCycle, alpha),
             flashTimer: hud.player.flashTimer
         };
@@ -299,6 +328,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
                 spin: lerp(pr0.spin, pr1.spin, alpha),
                 radius: alpha < 0.5 ? (pr0.radius || 11) : (pr1.radius || 11),
                 power: alpha < 0.5 ? (pr0.power || 0) : (pr1.power || 0),
+                color: pr0.color || null,
                 enemyKind: pr0.enemyKind || null,
                 scale: pr0.scale || 1.0
             });
@@ -406,9 +436,11 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         marker: hud.marker || null,
         viewWidth: f0.viewWidth,
         viewHeight: f0.viewHeight,
+        fighterId: f0.fighterId || 'shadow',
         floor: f0.floor,
         score: hud.score,
         comboCount: hud.comboCount,
+        streakTier: hud.streakTier || 0,
         parriesLanded: hud.parriesLanded,
         cameraX: lerp(f0.cameraX, f1.cameraX, alpha),
         screenShake: lerp(f0.screenShake, f1.screenShake, alpha),
@@ -422,6 +454,8 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         traps: bTraps,
         particles: bParticles,
         slashes: bSlashes,
-        callouts: bCallouts
+        callouts: bCallouts,
+        afterimages: hud.afterimages || [],
+        bolts: hud.bolts || []
     };
 }

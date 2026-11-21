@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x9460a90f'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0x35a5693a'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0x4a2e6d22'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0xdb8f3b39'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -317,6 +317,195 @@ function runKungFuTestSuite() {
             'Expected tier-2 Super Power Ball with 4 pierce hits');
 
         return 'charge->hadouken + knife clash + 2x KO + super power ball OK';
+    });
+
+    // 3c. Fighting-Game Jump-Cancel (Mid-Attack, Mid-Hadouken, & Hitstop Jump Buffering)
+    runCase('Jump-cancel breaks out of attacks, hadouken, & preserves jump during hitstop', function () {
+        // A: Mid-attack1 jump-cancel
+        var sim = createSimState({ seed: 401, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        stepSimulation(sim, INPUT_ATTACK);
+        kfAssert(sim.player.action === 'attack1', 'Expected attack1');
+        for (var i = 0; i < 3; i++) stepSimulation(sim, INPUT_NONE);
+        stepSimulation(sim, INPUT_JUMP | INPUT_RIGHT);
+        kfAssert(sim.player.action === 'jump' && !sim.player.onGround && sim.player.vx > 0,
+            'Expected immediate jump-cancel out of attack1, got action=' + sim.player.action);
+
+        // B: Mid-hadouken jump-cancel
+        var simH = createSimState({ seed: 402, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simH.enemies = [];
+        for (var c = 0; c < CHARGE_READY_TICKS; c++) stepSimulation(simH, INPUT_ATTACK);
+        stepSimulation(simH, INPUT_NONE); // release hadouken
+        kfAssert(simH.player.action === 'hadouken', 'Expected hadouken');
+        for (var h = 0; h < 3; h++) stepSimulation(simH, INPUT_NONE);
+        stepSimulation(simH, INPUT_JUMP);
+        kfAssert(simH.player.action === 'jump' && !simH.player.onGround,
+            'Expected jump-cancel out of hadouken follow-through, got ' + simH.player.action);
+
+        // C: Hitstop jump-buffering (1-tick jump pressed during hitstop is NOT swallowed!)
+        var simHS = createSimState({ seed: 403, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        simHS.enemies = [];
+        simHS.player.x = 200;
+        var target = spawnEnemy(simHS, 'staff', 240, -1);
+        target.cooldown = 999;
+        stepSimulation(simHS, INPUT_ATTACK);
+        var hitstopSeen = false;
+        var jumpPressed = false;
+        for (var t = 0; t < 12; t++) {
+            if (simHS.hitstopTimer > 0 && !jumpPressed) {
+                hitstopSeen = true;
+                jumpPressed = true;
+                stepSimulation(simHS, INPUT_JUMP);
+            } else {
+                stepSimulation(simHS, INPUT_NONE);
+            }
+            if (jumpPressed && simHS.player.action === 'jump') break;
+        }
+        kfAssert(hitstopSeen, 'Expected hitstop to occur on melee hit');
+        kfAssert(simHS.player.action === 'jump' && !simHS.player.onGround,
+            'Jump pressed during hitstop was dropped! action=' + simHS.player.action);
+
+        return 'attack1 + hadouken + hitstop-buffered jump-cancels OK';
+    });
+
+    // 3d. Switch-Direction 360° Hurricane Spin Kick (Omni Strike + Dual-Side Deflect)
+    runCase('Switch-direction 360° Hurricane Spin hits & deflects on both sides', function () {
+        var sim = createSimState({ seed: 410, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        sim.player.x = 300;
+        sim.player.facing = 1;
+        var eLeft = spawnEnemy(sim, 'staff', 240, 1);
+        var eRight = spawnEnemy(sim, 'staff', 360, -1);
+        eLeft.cooldown = 999;
+        eRight.cooldown = 999;
+
+        // Incoming ninja star from behind (left) & barrel from ahead (right)
+        sim.projectiles.push({
+            id: allocEntityId(sim), kind: 'knife',
+            x: 248, y: GROUND_Y - 46, vx: 6.5, vy: 0,
+            owner: 'enemy', damage: 11, spin: 0, life: 80
+        });
+        sim.traps.push({
+            id: allocEntityId(sim), kind: 'barrel', owner: 'env',
+            x: 350, y: GROUND_Y, vx: -4.2, vy: 0, gravity: 0, angle: 0,
+            telegraph: 0, active: true, hitsLeft: 4, bounced: 0, life: 200
+        });
+
+        // Flip direction (facing Right -> press Left + Attack) -> 360° Hurricane Spin Kick!
+        stepSimulation(sim, INPUT_LEFT | INPUT_ATTACK);
+        kfAssert(sim.player.action === 'spin', 'Expected spin on direction-flip + attack, got ' + sim.player.action);
+        kfAssert(sim.projectiles.length === 1 && sim.projectiles[0].owner === 'player' && sim.projectiles[0].vx < 0,
+            'Expected star from behind to be deflected back left on spin');
+        kfAssert(sim.traps.length === 1 && sim.traps[0].owner === 'player' && sim.traps[0].vx > 0,
+            'Expected barrel from ahead to be bowled back right on spin');
+        for (var t = 0; t < 8; t++) stepSimulation(sim, INPUT_NONE);
+
+        kfAssert(sim.player.hp === sim.player.maxHp, 'Player should take no damage during 360° spin deflect');
+        kfAssert(eLeft.hp < eLeft.maxHp && eRight.hp < eRight.maxHp,
+            'Expected 360° spin to strike enemies on BOTH sides (L=' + eLeft.hp + ', R=' + eRight.hp + ')');
+
+        return 'omni spin hit L+R + dual-side star/barrel deflect OK';
+    });
+
+    // 3e. All 5 Playable Fighters Live Streak Skills (5-Hit Tier 1 & 10-Hit Tier 2)
+    runCase('All 5 playable fighters trigger unique Tier 1 (5+) & Tier 2 (10+) streak skills', function () {
+        // 1. SHADOW RONIN: Afterimage clone (5+) + Crescent Wave (10+)
+        var sShadow = createSimState({ seed: 501, fighterId: 'shadow' });
+        sShadow.enemies = [];
+        sShadow.comboCount = 10; sShadow.comboDecayTimer = 150; sShadow.streakTier = 2;
+        sShadow.player.x = 200;
+        var shEn = spawnEnemy(sShadow, 'boss', 260, -1);
+        shEn.cooldown = 999;
+        stepSimulation(sShadow, INPUT_JUMP);
+        stepSimulation(sShadow, INPUT_ATTACK); // airkick -> clone + crescent wave
+        kfAssert(sShadow.afterimages.length >= 1, 'Shadow Ronin failed to spawn afterimage clone');
+        var hasCrescent = false;
+        for (var p1 = 0; p1 < sShadow.projectiles.length; p1++) {
+            if (sShadow.projectiles[p1].kind === 'crescent') hasCrescent = true;
+        }
+        kfAssert(hasCrescent, 'Shadow Ronin Tier 2 failed to fire crescent wave');
+
+        // 2. DRAGON FIST: Rising Dragon Uppercut + Meteor Dive Slam (10+)
+        var sDragon = createSimState({ seed: 502, fighterId: 'dragon' });
+        sDragon.enemies = [];
+        sDragon.comboCount = 10; sDragon.comboDecayTimer = 150; sDragon.streakTier = 2;
+        sDragon.player.x = 200;
+        sDragon.player.comboStep = 2; sDragon.player.comboWindow = 20;
+        var drEn = spawnEnemy(sDragon, 'boss', 300, -1);
+        drEn.cooldown = 999;
+        stepSimulation(sDragon, INPUT_ATTACK);
+        kfAssert(sDragon.player.action === 'dragon_upper' && !sDragon.player.onGround,
+            'Dragon Fist Tier 2 3rd hit should launch dragon_upper');
+        for (var dt = 0; dt < 20 && (sDragon.hitstopTimer > 0 || sDragon.player.actionTick < 9); dt++) {
+            stepSimulation(sDragon, INPUT_NONE);
+        }
+        stepSimulation(sDragon, INPUT_ATTACK);
+        kfAssert(sDragon.player.action === 'divekick', 'Dragon Fist Tier 2 air attack should be divekick, got ' + sDragon.player.action);
+        var drHpBefore = drEn.hp;
+        for (var dl = 0; dl < 25; dl++) stepSimulation(sDragon, INPUT_NONE);
+        kfAssert(drEn.hp < drHpBefore, 'Dragon Fist Meteor Dive landing shockwave should damage nearby enemy');
+
+        // 3. THUNDER MONK: Chain-Lightning (5+) + 2x Charge Triple Storm Hadouken (10+)
+        var sThunder = createSimState({ seed: 503, fighterId: 'thunder' });
+        sThunder.enemies = [];
+        sThunder.comboCount = 10; sThunder.comboDecayTimer = 150; sThunder.streakTier = 2;
+        sThunder.player.x = 200;
+        var th1 = spawnEnemy(sThunder, 'boss', 245, -1);
+        var th2 = spawnEnemy(sThunder, 'boss', 380, -1);
+        th1.cooldown = 999; th2.cooldown = 999;
+        stepSimulation(sThunder, INPUT_ATTACK);
+        for (var tt = 0; tt < 10; tt++) stepSimulation(sThunder, INPUT_NONE);
+        kfAssert(th2.hp < th2.maxHp, 'Thunder Monk chain-lightning should arc to distant enemy');
+        // Fast 2x charge -> ready in half the ticks & launches 3 storm fireballs!
+        sThunder.player.x = 80;
+        sThunder.player.action = 'idle'; sThunder.player.actionTick = 0;
+        sThunder.hitstopTimer = 0;
+        for (var tc = 0; tc < Math.ceil(CHARGE_READY_TICKS / 2); tc++) stepSimulation(sThunder, INPUT_ATTACK);
+        kfAssert(sThunder.player.attackChargeTicks >= CHARGE_READY_TICKS,
+            'Thunder Monk Tier 2 should charge at 2x speed, got ' + sThunder.player.attackChargeTicks);
+        stepSimulation(sThunder, INPUT_NONE);
+        var fbCount = 0;
+        for (var tp = 0; tp < sThunder.projectiles.length; tp++) {
+            if (sThunder.projectiles[tp].kind === 'fireball') fbCount++;
+        }
+        kfAssert(fbCount === 3, 'Thunder Monk Tier 2 should fire 3 Storm Hadouken spheres, got ' + fbCount);
+
+        // 4. LOTUS BLADE: Orbiting Blades (5+) + Shuriken Fan (10+)
+        var sLotus = createSimState({ seed: 504, fighterId: 'lotus' });
+        sLotus.enemies = [];
+        sLotus.comboCount = 10; sLotus.comboDecayTimer = 150; sLotus.streakTier = 2;
+        sLotus.player.x = 200;
+        var ltEn = spawnEnemy(sLotus, 'boss', 252, -1);
+        ltEn.cooldown = 999;
+        for (var lo = 0; lo < 30; lo++) stepSimulation(sLotus, INPUT_NONE);
+        kfAssert(ltEn.hp < ltEn.maxHp, 'Lotus Blade orbiting ink blades should slice nearby enemy automatically');
+        stepSimulation(sLotus, INPUT_LEFT | INPUT_ATTACK); // spin -> omni jade blade fan!
+        var jadeCount = 0;
+        for (var lp = 0; lp < sLotus.projectiles.length; lp++) {
+            if (sLotus.projectiles[lp].kind === 'jade_blade') jadeCount++;
+        }
+        kfAssert(jadeCount >= 3, 'Lotus Blade Tier 2 spin should launch jade_blade fan, got ' + jadeCount);
+
+        // 5. PHANTOM GALE: Pinball Launch (5+) + Invuln Flash-Step Dash (10+)
+        var sGale = createSimState({ seed: 505, fighterId: 'gale' });
+        sGale.enemies = [];
+        sGale.comboCount = 10; sGale.comboDecayTimer = 150; sGale.streakTier = 2;
+        sGale.player.x = 680;
+        var gaEn = spawnEnemy(sGale, 'staff', 725, -1);
+        gaEn.cooldown = 999;
+        stepSimulation(sGale, INPUT_ATTACK); // even jab launches at Tier 1+
+        var sawBounce = false;
+        for (var gb = 0; gb < 25; gb++) {
+            stepSimulation(sGale, INPUT_NONE);
+            if (gaEn.wallBounces > 0) sawBounce = true;
+        }
+        kfAssert(sawBounce, 'Phantom Gale Tier 1+ should pinball-bounce launched enemy off camera edge');
+        sGale.player.x = 200; sGale.player.comboStep = 2; sGale.player.comboWindow = 20;
+        stepSimulation(sGale, INPUT_ATTACK); // attack3 -> Flash-Step Dash!
+        kfAssert(sGale.player.invulnTimer >= 10 && sGale.player.vx > 10,
+            'Phantom Gale Tier 2 attack3 should trigger invuln Flash-Step Dash');
+
+        return 'all 5 fighters (shadow/dragon/thunder/lotus/gale) Tier 1+2 skills verified';
     });
 
     // 4. Replay Ring Buffer Wraparound, Blending, & Play-From-Here Restore

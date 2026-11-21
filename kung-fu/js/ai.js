@@ -223,18 +223,26 @@ function computeAiInput(ai, simState) {
         return mask;
     }
 
-    // 6. Escape if surrounded tightly on both sides
+    // 6. Surrounded on both sides -> 360° Switch-Direction Hurricane Spin Kick or Jump Escape!
     if (ai.retreatTicks > 0) {
         ai.retreatTicks -= 1;
         ai.lastMode = 'evade';
         return ai.retreatDir < 0 ? INPUT_LEFT : INPUT_RIGHT;
     }
-    if (leftCount > 0 && rightCount > 0 && nearestDist < 75 && p.onGround && ai.jumpCooldown === 0) {
-        ai.jumpCooldown = 34;
-        ai.retreatTicks = 12;
-        ai.retreatDir = (p.x > simState.cameraX + 420) ? -1 : 1;
-        ai.lastMode = 'evade';
-        return INPUT_JUMP | (ai.retreatDir < 0 ? INPUT_LEFT : INPUT_RIGHT);
+    if (leftCount > 0 && rightCount > 0 && nearestDist < 90 && p.onGround) {
+        if ((p.spinCooldown || 0) === 0 && !p.attackHeld && ai.attackCooldown === 0) {
+            ai.attackCooldown = 12;
+            ai.lastMode = 'spin';
+            var oppDir = p.facing > 0 ? INPUT_LEFT : INPUT_RIGHT;
+            return oppDir | INPUT_ATTACK;
+        }
+        if (ai.jumpCooldown === 0) {
+            ai.jumpCooldown = 34;
+            ai.retreatTicks = 12;
+            ai.retreatDir = (p.x > simState.cameraX + 420) ? -1 : 1;
+            ai.lastMode = 'evade';
+            return INPUT_JUMP | (ai.retreatDir < 0 ? INPUT_LEFT : INPUT_RIGHT);
+        }
     }
 
     // 7. Engage Nearest Enemy

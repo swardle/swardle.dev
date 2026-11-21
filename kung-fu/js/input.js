@@ -108,7 +108,8 @@ function createInputRecording(setup) {
             seed: (setup.seed >>> 0),
             viewWidth: Math.round(setup.viewWidth || 800),
             viewHeight: Math.round(setup.viewHeight || 450),
-            tickRate: setup.tickRate || 60
+            tickRate: setup.tickRate || 60,
+            fighterId: setup.fighterId || 'shadow'
         },
         frames: [],
         devCheckpoints: null
@@ -230,7 +231,8 @@ function serializeInputRecording(recording, devCheckpoints) {
             seed: (recording.setup.seed >>> 0),
             viewWidth: recording.setup.viewWidth,
             viewHeight: recording.setup.viewHeight,
-            tickRate: recording.setup.tickRate
+            tickRate: recording.setup.tickRate,
+            fighterId: recording.setup.fighterId || 'shadow'
         },
         totalTicks: recording.frames.length,
         rleFrames: encodeFramesRLE(recording.frames)
