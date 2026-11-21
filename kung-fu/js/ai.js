@@ -109,7 +109,7 @@ function computeAiInput(ai, simState) {
         } else if (tr.kind === 'tile') {
             var tdx = tr.x - p.x;
             var absTdx = Math.abs(tdx);
-            if (tr.telegraph <= 0 && absTdx < 76 && tr.y >= p.y - 115 && tr.y <= p.y) {
+            if (tr.telegraph <= 0 && absTdx < 82 && tr.y >= p.y - 126 && tr.y <= p.y) {
                 // Bat the falling roof brick straight into enemies!
                 ai.chargeHoldTicks = 0;
                 if (p.attackHeld) {
@@ -122,8 +122,8 @@ function computeAiInput(ai, simState) {
                 return (p.facing !== tDir)
                     ? ((tDir > 0 ? INPUT_RIGHT : INPUT_LEFT) | INPUT_ATTACK)
                     : INPUT_ATTACK;
-            } else if (tr.telegraph > 0 && tr.telegraph <= 14 && absTdx < 26) {
-                // Step slightly aside so we're cleanly positioned to bat or dodge the brick
+            } else if (tr.telegraph > 0 && tr.telegraph <= 10 && absTdx < 18) {
+                // Step slightly aside into optimal batting range
                 ai.chargeHoldTicks = 0;
                 ai.lastMode = 'evade';
                 return (tdx >= 0) ? INPUT_LEFT : INPUT_RIGHT;

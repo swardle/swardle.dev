@@ -796,37 +796,62 @@ function drawEnemyFighter(ctx, e, tick) {
 
 function drawProjectile(ctx, pr) {
     if (pr.kind === 'ko_body') {
-        // Tumbling KO'd enemy flying through the air as a human bowling projectile!
+        // Tumbling KO'd enemy flying at chest height as a human bowling projectile!
         var sc = pr.scale || 1.0;
+        var streakDir = pr.vx >= 0 ? -1 : 1;
         ctx.save();
         ctx.translate(pr.x, pr.y);
-        // Trailing golden-crimson motion streak
-        var streakDir = pr.vx >= 0 ? -1 : 1;
-        ctx.strokeStyle = 'rgba(255, 184, 48, 0.55)';
-        ctx.lineWidth = 6 * sc;
+        // Dramatic golden-crimson bowling speed lines
+        ctx.strokeStyle = 'rgba(255, 184, 48, 0.72)';
+        ctx.lineWidth = 7 * sc;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.lineTo(streakDir * 36 * sc, -pr.vy * 1.4);
+        ctx.lineTo(streakDir * 52 * sc, -pr.vy * 1.6);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(230, 56, 40, 0.55)';
+        ctx.lineWidth = 3.5 * sc;
+        ctx.beginPath();
+        ctx.moveTo(0, -10 * sc);
+        ctx.lineTo(streakDir * 44 * sc, -10 * sc - pr.vy * 1.2);
+        ctx.moveTo(0, 10 * sc);
+        ctx.lineTo(streakDir * 44 * sc, 10 * sc - pr.vy * 1.2);
         ctx.stroke();
 
         ctx.rotate(pr.spin);
         ctx.scale(sc, sc);
         ctx.shadowColor = '#ffb830';
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 10;
         ctx.fillStyle = '#0b0909';
         ctx.strokeStyle = '#0b0909';
-        // Compact tumbling martial-artist silhouette
+        // Full tumbling martial artist silhouette (torso, limbs, head + hat/headband)
         ctx.beginPath();
-        ctx.ellipse(0, 0, 12, 16, 0, 0, Math.PI * 2);
+        ctx.moveTo(-10, -14); ctx.lineTo(10, -14);
+        ctx.lineTo(12, 16);   ctx.lineTo(-12, 16);
+        ctx.closePath();
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(0, -21, 7.5, 0, Math.PI * 2);
+        ctx.arc(0, -24, 9, 0, Math.PI * 2);
         ctx.fill();
-        drawLimb(ctx, -6, 10, -18, 22, 6);
-        drawLimb(ctx, 6, 10, 18, 20, 6);
-        drawLimb(ctx, -8, -8, -22, -16, 5.5);
-        drawLimb(ctx, 8, -8, 22, -14, 5.5);
+        drawLimb(ctx, -6, 12, -19, 28, 6.5);
+        drawLimb(ctx, 6, 12, 20, 26, 6.5);
+        drawLimb(ctx, -9, -10, -25, -18, 6);
+        drawLimb(ctx, 9, -10, 25, -15, 6);
+        ctx.shadowBlur = 0;
+        if (pr.enemyKind === 'staff') {
+            // Straw kasa hat spinning with them!
+            ctx.fillStyle = '#0b0909';
+            ctx.beginPath();
+            ctx.moveTo(-22, -26); ctx.lineTo(0, -40); ctx.lineTo(22, -26);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            ctx.strokeStyle = pr.enemyKind === 'knife' ? '#8c3b9c' : '#9a8c80';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-8, -26); ctx.lineTo(8, -26);
+            ctx.stroke();
+        }
         ctx.restore();
         return;
     }
@@ -922,13 +947,26 @@ function drawTrap(ctx, tr, tick) {
         ctx.save();
         ctx.translate(tr.x, tr.y - 18);
         if (isPlayerOwned) {
-            // Powered-up golden-crimson bowling aura!
-            var bg = ctx.createRadialGradient(0, 0, 12, 0, 0, 32);
-            bg.addColorStop(0, 'rgba(255, 210, 76, 0.65)');
+            // Blazing golden bowling-ball comet trail + aura!
+            var bTrailDir = (tr.vx || 1) >= 0 ? -1 : 1;
+            var trailG = ctx.createLinearGradient(0, 0, bTrailDir * 72, 0);
+            trailG.addColorStop(0, 'rgba(255, 210, 76, 0.78)');
+            trailG.addColorStop(0.5, 'rgba(255, 120, 35, 0.45)');
+            trailG.addColorStop(1, 'rgba(255, 100, 20, 0)');
+            ctx.fillStyle = trailG;
+            ctx.beginPath();
+            ctx.moveTo(0, -17);
+            ctx.lineTo(bTrailDir * 72, 0);
+            ctx.lineTo(0, 17);
+            ctx.closePath();
+            ctx.fill();
+
+            var bg = ctx.createRadialGradient(0, 0, 12, 0, 0, 34);
+            bg.addColorStop(0, 'rgba(255, 210, 76, 0.75)');
             bg.addColorStop(1, 'rgba(255, 140, 40, 0)');
             ctx.fillStyle = bg;
             ctx.beginPath();
-            ctx.arc(0, 0, 32, 0, Math.PI * 2);
+            ctx.arc(0, 0, 34, 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.rotate(tr.angle);

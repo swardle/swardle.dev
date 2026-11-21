@@ -114,7 +114,7 @@ function createSimState(setup) {
         bossDefeated: false,
         floorClearTimer: 0,
         goPromptTimer: 0,
-        trapCooldown: 150,
+        trapCooldown: 95,
         cameraX: 0,
         hitstopTimer: 0,
         screenShake: 0,
@@ -375,16 +375,16 @@ function spawnTrap(state, kind) {
             kind: 'tile',
             owner: 'env',
             x: targetX,
-            y: -40,
+            y: 10,
             vx: 0,
             vy: 0,
-            gravity: 0.85,
+            gravity: 0.28,
             angle: rngRange(state.rng, -0.3, 0.3),
-            telegraph: 42,
+            telegraph: 24,
             active: true,
             bounced: 0,
             damage: 28,
-            life: 120
+            life: 160
         });
     }
 }
@@ -616,7 +616,7 @@ function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents,
         spawnParticles(state, hitX, hitY, 10, '#d92828', 1.5, 5.5, 1.5);
         spawnCallout(state, hitX, hitY - 30, e.kind === 'boss' ? 'MASTER DEFEATED!' : 'KO!', '#e83828');
         soundEvents.push(e.kind === 'boss' ? 'boss_ko' : 'ko');
-        // Launch KO'd regular enemies tumbling across the screen so they bowl into other enemies & barrels!
+        // Launch KO'd regular enemies tumbling at chest height across the screen so they bowl into other enemies & barrels!
         if (e.kind !== 'boss' && canLaunch !== false && Math.abs(kx) >= 4.0) {
             var koDir = kx >= 0 ? 1 : -1;
             state.projectiles.push({
@@ -625,15 +625,15 @@ function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents,
                 enemyKind: e.kind,
                 scale: e.scale,
                 x: e.x,
-                y: e.y - 36 * e.scale,
-                vx: koDir * Math.max(9.6, Math.abs(kx) * 1.05),
-                vy: Math.min(-5.0, ky - 1.2),
-                gravity: 0.42,
+                y: e.y - 42 * e.scale,
+                vx: koDir * Math.max(12.2, Math.abs(kx) * 1.15),
+                vy: -3.2,
+                gravity: 0.24,
                 owner: 'player',
-                damage: 24,
+                damage: 26,
                 hitsLeft: 3,
                 spin: 0,
-                life: 44
+                life: 55
             });
         }
         if (e.kind === 'boss') {
@@ -647,7 +647,7 @@ function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents,
         }
         return true; // defeated
     } else {
-        // Heavy finisher / counter launches living regular enemies as bowling projectiles into other enemies!
+        // Heavy kick/finisher/counter launches living regular enemies at chest height into other enemies behind them!
         if (canLaunch === true && e.kind !== 'boss') {
             var launchDir = kx >= 0 ? 1 : -1;
             e.state = 'thrown';
@@ -655,8 +655,8 @@ function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents,
             e.stateDur = 28;
             e.thrownTimer = 28;
             e.thrownId = allocEntityId(state);
-            e.vx = launchDir * Math.max(11.5, Math.abs(kx));
-            e.vy = Math.min(-5.8, ky);
+            e.vx = launchDir * Math.max(12.6, Math.abs(kx) * 1.15);
+            e.vy = -3.4;
             e.onGround = false;
             spawnCallout(state, hitX, hitY - 36, 'LAUNCH!', '#ffb830');
         } else if (!(e.kind === 'boss' && e.state === 'leap')) {
@@ -857,16 +857,18 @@ function tryDeflectTrapWithSwing(state, p, tr, prevX, prevY, soundEvents) {
 
     var trCenterY = tr.kind === 'barrel' ? (tr.y - 18) : tr.y;
     var prevCenterY = tr.kind === 'barrel' ? (prevY - 18) : prevY;
-    var segMinY = Math.min(prevCenterY, trCenterY) - 18;
-    var segMaxY = Math.max(prevCenterY, trCenterY) + 18;
+    var segMinY = Math.min(prevCenterY, trCenterY) - 20;
+    var segMaxY = Math.max(prevCenterY, trCenterY) + 20;
+    var swingTopY = tr.kind === 'tile' ? (p.y - 126) : (p.y - 104);
 
-    if (segMaxX < swingMinX || segMinX > swingMaxX || segMaxY < p.y - 104 || segMinY > p.y + 14) {
+    if (segMaxX < swingMinX || segMinX > swingMaxX || segMaxY < swingTopY || segMinY > p.y + 14) {
         return false;
     }
 
     var relX = (tr.x - p.x) * p.facing;
     var isHeavyMove = (p.action === 'attack3' || p.action === 'counter');
-    var isSweetSpot = isHeavyMove || (relX >= 14 && relX <= 62);
+    var isPopMove = (p.action === 'attack3' || p.action === 'airkick');
+    var isSweetSpot = isHeavyMove || (relX >= 10 && relX <= 86);
 
     tr.owner = 'player';
     tr.bounced = 0;
@@ -875,22 +877,22 @@ function tryDeflectTrapWithSwing(state, p, tr, prevX, prevY, soundEvents) {
     if (tr.kind === 'barrel') {
         tr.hitsLeft = 4;
         tr.life = 180;
-        if (isSweetSpot) {
+        if (!isPopMove && isSweetSpot) {
             // Bowling-ball kickback straight across the dojo floor!
-            tr.vx = p.facing * 9.8;
+            tr.vx = p.facing * 11.2;
             tr.vy = 0;
             tr.gravity = 0;
-            spawnRingEffect(state, tr.x, tr.y - 18, '#ffb830', 54);
-            spawnParticles(state, tr.x, tr.y - 18, 12, '#ffb830', 2.0, 6.2, 1.0);
-            spawnCallout(state, tr.x, tr.y - 44, 'BOWL!', '#ffb830');
+            spawnRingEffect(state, tr.x, tr.y - 18, '#ffb830', 58);
+            spawnParticles(state, tr.x, tr.y - 18, 14, '#ffb830', 2.2, 6.8, 1.0);
+            spawnCallout(state, tr.x, tr.y - 46, 'BOWL!', '#ffb830');
         } else {
-            // Edge swipe pops the barrel into a high bouncing arc!
-            tr.vx = p.facing * 7.8;
-            tr.vy = -(7.2 + rngRange(state.rng, 0, 1.8));
-            tr.gravity = 0.36;
-            spawnRingEffect(state, tr.x, tr.y - 18, '#ffe7b3', 48);
-            spawnParticles(state, tr.x, tr.y - 18, 10, '#ffe7b3', 1.8, 5.5, 1.2);
-            spawnCallout(state, tr.x, tr.y - 44, 'LAUNCH!', '#ffe7b3');
+            // Uppercut / jump-kick / edge swipe pops the barrel in a chest-height bouncing arc!
+            tr.vx = p.facing * 9.5;
+            tr.vy = -5.8;
+            tr.gravity = 0.34;
+            spawnRingEffect(state, tr.x, tr.y - 18, '#ffe7b3', 50);
+            spawnParticles(state, tr.x, tr.y - 18, 12, '#ffe7b3', 1.8, 5.8, 1.2);
+            spawnCallout(state, tr.x, tr.y - 46, 'LAUNCH!', '#ffe7b3');
         }
         state.score += 80;
         if (state.hitstopTimer < 3) state.hitstopTimer = 3;
@@ -1077,7 +1079,7 @@ function stepSimulation(state, inputMask) {
             var hitYMin = p.y - 95;
             var hitYMax = p.y + 12;
 
-            var launchLiving = (p.action === 'attack3' || p.action === 'counter');
+            var launchLiving = (p.action === 'attack3' || p.action === 'airkick' || p.action === 'counter');
             for (var ei = state.enemies.length - 1; ei >= 0; ei--) {
                 var en = state.enemies[ei];
                 if (en.lastHitSwingId === p.swingId) continue;
@@ -1227,7 +1229,7 @@ function stepSimulation(state, inputMask) {
         if (state.trapCooldown <= 0) {
             var trapKind = (rngInt(state.rng, 0, 2) === 0) ? 'barrel' : 'tile';
             spawnTrap(state, trapKind);
-            state.trapCooldown = Math.max(135, 250 - state.floor * 18) + rngInt(state.rng, 0, 70);
+            state.trapCooldown = Math.max(105, 185 - state.floor * 14) + rngInt(state.rng, 0, 55);
         }
     }
 
@@ -1401,7 +1403,7 @@ function stepSimulation(state, inputMask) {
         }
 
         e.x += e.vx;
-        e.vy += GRAVITY;
+        e.vy += (e.state === 'thrown' && (e.thrownTimer || 0) > 0) ? 0.26 : GRAVITY;
         e.y += e.vy;
         if (e.y >= GROUND_Y) {
             e.y = GROUND_Y;
@@ -1499,9 +1501,9 @@ function stepSimulation(state, inputMask) {
                     kbTarget.lastHitProjId = pr.id;
                     var kbDir = pr.vx >= 0 ? 1 : -1;
                     var kbDead = damageEnemy(state, kbTarget, pr.damage, kbDir * 8.5, -4.8, 3, false, soundEvents, false);
-                    spawnRingEffect(state, kbTarget.x, kbTarget.y - 44, '#ffb830', 48);
-                    spawnCallout(state, kbTarget.x, kbTarget.y - 74, 'STRIKE!', '#ffb830');
-                    state.score += 100;
+                    spawnRingEffect(state, kbTarget.x, kbTarget.y - 44, '#ffb830', 54);
+                    spawnCallout(state, kbTarget.x, kbTarget.y - 78, 'ENEMY BOWL!', '#ffb830');
+                    state.score += 120;
                     if (kbDead) state.enemies.splice(kbE, 1);
                     pr.hitsLeft = (pr.hitsLeft || 1) - 1;
                     if (pr.hitsLeft <= 0) {
@@ -1818,7 +1820,7 @@ function stepSimulation(state, inputMask) {
             } else {
                 var prevTX = trp.x;
                 var prevTY = trp.y;
-                trp.vy += 0.85;
+                trp.vy = Math.min(10.5, trp.vy + (trp.gravity || 0.30));
                 trp.y += trp.vy;
                 if (playerSwinging && tryDeflectTrapWithSwing(state, p, trp, prevTX, prevTY, soundEvents)) {
                     // Deflected into a player brick projectile!

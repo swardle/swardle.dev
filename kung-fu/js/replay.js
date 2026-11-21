@@ -73,7 +73,7 @@ function captureRenderFrame(simState, inputMask, stepResult) {
         var tr = simState.traps[t];
         traps[t] = {
             id: tr.id, kind: tr.kind, owner: tr.owner || 'env', x: tr.x, y: tr.y,
-            angle: tr.angle, telegraph: tr.telegraph
+            vx: tr.vx || 0, angle: tr.angle, telegraph: tr.telegraph
         };
     }
 
@@ -326,6 +326,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
                 owner: alpha < 0.5 ? (t0.owner || 'env') : (t1.owner || 'env'),
                 x: lerp(t0.x, t1.x, alpha),
                 y: lerp(t0.y, t1.y, alpha),
+                vx: alpha < 0.5 ? (t0.vx || 0) : (t1.vx || 0),
                 angle: lerp(t0.angle, t1.angle, alpha),
                 telegraph: lerp(t0.telegraph, t1.telegraph, alpha)
             });
