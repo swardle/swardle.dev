@@ -8,7 +8,7 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0xd85f1eee'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0x34faf2ba'; // 0x51A7BEEF, 2400 ticks
 var KF_GOLDEN_AI_SEED_2_HASH = '0x3966a7af'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
@@ -151,6 +151,65 @@ function runKungFuTestSuite() {
         for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
         kfAssert(thrower.hp < thrower.maxHp || sim.enemies.length === 0, 'Deflected knife did not damage enemy');
         return 'parries=' + sim.parriesLanded + ' deflected knife hit enemy';
+    });
+
+    // 3a. Attacking an Incoming Ninja Star Blocks or Deflects It Back at the Thrower
+    runCase('Attacking incoming ninja star blocks or deflects it back at thrower', function () {
+        // Case A: Sweet-spot attack deflects the star straight back into the ninja who threw it
+        var sim = createSimState({ seed: 250, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        sim.player.x = 220;
+        sim.player.facing = 1;
+        var ninja = spawnEnemy(sim, 'knife', 380, -1);
+        ninja.cooldown = 999;
+
+        // Start attack1 so actionTick reaches spec.start (4) right when star enters hitbox
+        stepSimulation(sim, INPUT_ATTACK);
+        stepSimulation(sim, INPUT_NONE);
+        stepSimulation(sim, INPUT_NONE);
+        stepSimulation(sim, INPUT_NONE);
+        // Spawn incoming ninja star right in front of the player's strike
+        sim.projectiles.push({
+            id: allocEntityId(sim), kind: 'knife',
+            x: 268, y: GROUND_Y - 46, vx: -6.5, vy: 0,
+            owner: 'enemy', sourceEnemyId: ninja.id, damage: 11, spin: 0, life: 80
+        });
+        stepSimulation(sim, INPUT_NONE);
+
+        kfAssert(sim.player.hp === sim.player.maxHp, 'Player should take no damage when swatting ninja star');
+        kfAssert(sim.projectiles.length === 1 && sim.projectiles[0].owner === 'player' && sim.projectiles[0].vx > 0,
+            'Expected sweet-spot attack to deflect ninja star back toward thrower');
+
+        for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
+        kfAssert(ninja.hp < ninja.maxHp || sim.enemies.length === 0,
+            'Deflected ninja star did not hit the ninja who threw it');
+
+        // Case B: Early-frame strikes block/destroy or sometimes deflect across multiple seeds
+        var blockedCount = 0;
+        var deflectedCount = 0;
+        for (var s = 1; s <= 12; s++) {
+            var simB = createSimState({ seed: 500 + s, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+            simB.enemies = [];
+            simB.player.x = 220;
+            simB.player.facing = 1;
+            var nB = spawnEnemy(simB, 'knife', 390, -1);
+            nB.cooldown = 999;
+
+            stepSimulation(simB, INPUT_ATTACK);
+            simB.projectiles.push({
+                id: allocEntityId(simB), kind: 'knife',
+                x: 260, y: GROUND_Y - 46, vx: -6.5, vy: 0,
+                owner: 'enemy', sourceEnemyId: nB.id, damage: 11, spin: 0, life: 80
+            });
+            stepSimulation(simB, INPUT_NONE);
+            kfAssert(simB.player.hp === simB.player.maxHp, 'Player took damage on early-frame swat (seed ' + s + ')');
+            if (simB.projectiles.length === 0) blockedCount++;
+            else if (simB.projectiles[0].owner === 'player' && simB.projectiles[0].vx > 0) deflectedCount++;
+        }
+        kfAssert(blockedCount > 0 && deflectedCount > 0,
+            'Expected mix of blocks and deflections on early swipes (blocked=' + blockedCount + ', deflected=' + deflectedCount + ')');
+
+        return 'sweet-spot reflect hit thrower + early swipes (' + blockedCount + ' blocks, ' + deflectedCount + ' reflects)';
     });
 
     // 3b. Charged Street Fighter Power Ball (Hadouken) Launch, Knife Clash, & Super Pierce

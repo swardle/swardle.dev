@@ -822,6 +822,77 @@ function stepSimulation(state, inputMask) {
             p.vx *= 0.82;
         }
 
+        // Swat / Deflect incoming enemy ninja stars with melee strikes!
+        if (p.actionTick >= 1 && p.actionTick <= spec.end) {
+            var swatCenterX = p.x + p.facing * (spec.reach * 0.55);
+            var swatHalfW = spec.reach * 0.55 + 16;
+            var swatYMin = p.y - 95;
+            var swatYMax = p.y + 12;
+
+            for (var pri = state.projectiles.length - 1; pri >= 0; pri--) {
+                var inc = state.projectiles[pri];
+                if (inc.owner !== 'enemy' || inc.kind === 'fireball' || inc.life <= 0) continue;
+                var inFrontX = (inc.x - p.x) * p.facing;
+                if (inFrontX >= -14 && Math.abs(inc.x - swatCenterX) <= swatHalfW &&
+                    inc.y >= swatYMin && inc.y <= swatYMax) {
+                    var isSweetSpot = (p.actionTick >= spec.start && p.actionTick <= spec.start + 2);
+                    var isHeavyMove = (p.action === 'attack3' || p.action === 'counter');
+                    var sendBack = isSweetSpot || isHeavyMove || (rngNextFloat(state.rng) < 0.45);
+
+                    if (sendBack) {
+                        inc.owner = 'player';
+                        inc.damage = 28;
+                        inc.life = 110;
+
+                        // Aim back at the ninja who threw it if still alive
+                        var thrower = null;
+                        if (inc.sourceEnemyId) {
+                            for (var si = 0; si < state.enemies.length; si++) {
+                                if (state.enemies[si].id === inc.sourceEnemyId) {
+                                    thrower = state.enemies[si];
+                                    break;
+                                }
+                            }
+                        }
+                        var retSpeed = Math.max(9.5, Math.abs(inc.vx) * 1.55);
+                        if (thrower) {
+                            var rdx = thrower.x - inc.x;
+                            var rdy = (thrower.y - 46 * thrower.scale) - inc.y;
+                            var rDist = detHypot(rdx, rdy);
+                            if (rDist > 1e-4) {
+                                inc.vx = (rdx / rDist) * retSpeed;
+                                inc.vy = (rdy / rDist) * retSpeed;
+                            } else {
+                                inc.vx = p.facing * retSpeed;
+                                inc.vy = 0;
+                            }
+                        } else {
+                            inc.vx = p.facing * retSpeed;
+                            inc.vy = 0;
+                        }
+
+                        state.score += 100;
+                        if (state.hitstopTimer < 3) state.hitstopTimer = 3;
+                        state.screenShake = Math.max(state.screenShake, 4.5);
+                        spawnRingEffect(state, inc.x, inc.y, '#ffd24c', 52);
+                        spawnParticles(state, inc.x, inc.y, 10, '#ffd24c', 2.0, 6.2, 0.8);
+                        spawnCallout(state, inc.x, inc.y - 26, 'DEFLECT!', '#ffd24c');
+                        soundEvents.push('parry');
+                    } else {
+                        // Knock / block the ninja star cleanly out of the air
+                        state.score += 40;
+                        if (state.hitstopTimer < 2) state.hitstopTimer = 2;
+                        spawnRingEffect(state, inc.x, inc.y, '#f2ede2', 36);
+                        spawnParticles(state, inc.x, inc.y, 8, '#f2ede2', 1.8, 5.2, 0.8);
+                        spawnParticles(state, inc.x, inc.y, 4, '#ffd24c', 1.5, 4.2, 0.5);
+                        spawnCallout(state, inc.x, inc.y - 22, 'BLOCK!', '#f5ead6');
+                        soundEvents.push('block');
+                        state.projectiles.splice(pri, 1);
+                    }
+                }
+            }
+        }
+
         // Active hitbox window
         if (p.actionTick >= spec.start && p.actionTick <= spec.end) {
             var hitCenterX = p.x + p.facing * (spec.reach * 0.55);
@@ -1032,6 +1103,7 @@ function stepSimulation(state, inputMask) {
                         vx: e.facing * (6.2 + Math.min(2.0, (state.floor - 1) * 0.45)),
                         vy: 0,
                         owner: 'enemy',
+                        sourceEnemyId: e.id,
                         damage: e.dmg,
                         spin: 0,
                         life: 140

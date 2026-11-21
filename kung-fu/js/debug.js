@@ -102,6 +102,7 @@ function hashSimState(state) {
         h = fnv1aMixFloat64(h, pr.x);
         h = fnv1aMixFloat64(h, pr.y);
         h = fnv1aMixFloat64(h, pr.vx);
+        h = fnv1aMixFloat64(h, pr.vy || 0);
         h = fnv1aMixString(h, pr.owner);
         h = fnv1aMixUint32(h, pr.hitsLeft || 0);
         h = fnv1aMixUint32(h, pr.life);

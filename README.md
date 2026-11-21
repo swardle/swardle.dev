@@ -14,6 +14,40 @@ Only the small deterministic math & PRNG utilities live in `shared/` (`shared/ma
 
 ## Running Tests
 
-- **CLI (Node.js)**: `node tests/run_tests.js`
-- **Browser**: Open `vector-fury/tests.html` or `kung-fu/tests.html`
-- **Dev Determinism Mode**: Append `?dev=1` to any game URL to enable live FNV-1a tick hashing and fast verification.
+All test suites are zero-dependency (no `npm install` or build step required) and share identical deterministic test logic across Node.js and browsers.
+
+### 1. CLI Test Suite (All Games)
+
+Runs syntax checks across all 20 JS files plus the full **Vector Fury** and **Shadow Pagoda** test suites (deterministic math/PRNG, combat & physics, RLE input round-trips, replay ring buffer & Play-From-Here restore, determinism logger divergence detection, 2400-tick AI integration tests against locked golden hashes, 5-seed self-play bug hunt, and responsive viewport math):
+
+```bash
+node tests/run_tests.js
+```
+
+### 2. Browser Test Runners (Shared Suite + Live DOM/UI Tests)
+
+Each game has an in-browser test page that runs its full shared suite, prints the **Cross-Engine Determinism Fingerprint** (for comparing Chrome/Firefox/Safari across Windows, macOS, iOS, and Android), and executes browser-only DOM tests (HiDPI canvas sizing, `?dev=1` boot check, and mobile touch/replay UI layout).
+
+Start any local static server from the repo root (recommended over `file://` so the iframe DOM tests can inspect the game frame):
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open:
+
+- **Vector Fury**: `http://localhost:8000/vector-fury/tests.html` (or live at `https://swardle.dev/vector-fury/tests.html`)
+- **Shadow Pagoda (Kung Fu)**: `http://localhost:8000/kung-fu/tests.html` (or live at `https://swardle.dev/kung-fu/tests.html`)
+
+### 3. In-Game Dev Determinism & AI Tools (`?dev=1`)
+
+Append `?dev=1` to either game URL (e.g. `http://localhost:8000/kung-fu/?dev=1` or `http://localhost:8000/vector-fury/?dev=1`) and press **`Esc`** (or click **`MENU [DEV]`**) to access:
+
+- Live per-tick FNV-1a simulation state hashing
+- **Fast Verify Determinism** (re-simulates recorded inputs and pinpoints any divergent tick)
+- **Run AI Integration Test** & **Save AI Test Input**
+- **Download Debug Log**
+
+### 4. Continuous Integration (GitHub Actions)
+
+`.github/workflows/test.yml` automatically runs `node tests/run_tests.js` across `ubuntu-latest`, `macos-latest`, and `windows-latest` on every push and pull request to `main`.
