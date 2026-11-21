@@ -929,7 +929,7 @@
         });
 
         document.addEventListener('keyup', function (e) {
-            liveInputKeyUp(liveInput, e.key);
+            liveInputKeyUp(liveInput, e.key, e.code);
         });
 
         if (isMobileDevice) {

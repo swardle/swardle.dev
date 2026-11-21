@@ -473,6 +473,23 @@ function drawFighterSilhouette(ctx, opts) {
         lKneeX = -12; lKneeY = -24; lFootX = -20; lFootY = -14;
         rKneeX = 16;  rKneeY = -34; rFootX = 44;  rFootY = -32;
         fHandX = 12; fHandY = -48; bHandX = -24; bHandY = -52;
+    } else if (pose === 'charge') {
+        // Street Fighter Hadouken Chi-Gathering Stance (cupped hands pulled to hip)
+        var vibe = Math.sin(phase * 4.5) * 1.2;
+        torsoLean = -5;
+        hipY = -29;
+        shoulderX = -5 + vibe; shoulderY = -52; headX = -3 + vibe; headY = -65;
+        lFootX = -17; rFootX = 17; lKneeX = -13; lKneeY = -15; rKneeX = 13; rKneeY = -15;
+        fElbowX = -10; fElbowY = -44; fHandX = -3 + vibe; fHandY = -40;
+        bElbowX = -14; bElbowY = -47; bHandX = -6 + vibe; bHandY = -45;
+    } else if (pose === 'hadouken') {
+        // Street Fighter Double-Palm Energy Thrust Release!
+        torsoLean = 14;
+        hipY = -31;
+        shoulderX = 14; shoulderY = -54; headX = 17; headY = -66;
+        lFootX = -20; rFootX = 24; lKneeX = -12; lKneeY = -16; rKneeX = 16; rKneeY = -16;
+        fElbowX = 25; fElbowY = -50; fHandX = 40; fHandY = -48;
+        bElbowX = 21; bElbowY = -45; bHandX = 36; bHandY = -43;
     } else if (pose === 'block' || pose === 'parry') {
         // Defensive Cross-Arm Guard / Golden Parry Stance
         torsoLean = -4;
@@ -615,6 +632,67 @@ function drawFighterSilhouette(ctx, opts) {
         ctx.stroke();
     }
 
+    // Street Fighter Chi Charge-Up Orb between cupped palms
+    if (opts.chargeTicks && opts.chargeTicks >= CHARGE_VISUAL_TICKS) {
+        var cProg = Math.min(1, (opts.chargeTicks - CHARGE_VISUAL_TICKS) / Math.max(1, CHARGE_MAX_TICKS - CHARGE_VISUAL_TICKS));
+        var isMaxCharge = opts.chargeTicks >= CHARGE_MAX_TICKS;
+        var isReadyCharge = opts.chargeTicks >= CHARGE_READY_TICKS;
+        var orbX = (pose === 'charge') ? -3 : (fHandX + 2);
+        var orbY = (pose === 'charge') ? -42 : fHandY;
+        var pulseR = Math.sin(phase * 4.2) * (isMaxCharge ? 3.0 : (isReadyCharge ? 2.0 : 1.0));
+        var orbR = 5.5 + cProg * 12.5 + pulseR;
+
+        var orbGrad = ctx.createRadialGradient(orbX, orbY, 1.5, orbX, orbY, orbR * 2.0);
+        if (isMaxCharge) {
+            orbGrad.addColorStop(0, '#ffffff');
+            orbGrad.addColorStop(0.38, '#7ef0ff');
+            orbGrad.addColorStop(0.72, 'rgba(255, 210, 76, 0.85)');
+            orbGrad.addColorStop(1, 'rgba(255, 160, 40, 0)');
+        } else {
+            orbGrad.addColorStop(0, '#ffffff');
+            orbGrad.addColorStop(0.45, '#5ce8ff');
+            orbGrad.addColorStop(0.78, 'rgba(38, 184, 255, 0.65)');
+            orbGrad.addColorStop(1, 'rgba(38, 184, 255, 0)');
+        }
+        ctx.fillStyle = orbGrad;
+        ctx.beginPath();
+        ctx.arc(orbX, orbY, orbR * 2.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Swirling chi arcs pulling energy inward
+        ctx.strokeStyle = isMaxCharge ? '#ffd24c' : '#7ef0ff';
+        ctx.lineWidth = isReadyCharge ? 2.2 : 1.5;
+        for (var ci = 0; ci < 3; ci++) {
+            var ca = phase * 3.4 + ci * 2.094;
+            ctx.beginPath();
+            ctx.arc(orbX, orbY, orbR + 4 + (ci % 2) * 3, ca, ca + 1.05);
+            ctx.stroke();
+        }
+
+        // Ground chi wind ripples once Power Ball is ready to fire
+        if (isReadyCharge) {
+            ctx.strokeStyle = isMaxCharge ? 'rgba(255, 210, 76, 0.72)' : 'rgba(92, 232, 255, 0.62)';
+            ctx.lineWidth = 2;
+            var ringSpread = 22 + ((phase * 14) % 18);
+            ctx.beginPath();
+            ctx.ellipse(0, 1, ringSpread, 5, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+    }
+
+    // Double-Palm Energy Muzzle Burst on Hadouken release
+    if (pose === 'hadouken' && (opts.actionTick || 0) < 8) {
+        var mAlpha = 1 - (opts.actionTick || 0) / 8;
+        ctx.save();
+        ctx.globalAlpha = mAlpha;
+        ctx.strokeStyle = '#7ef0ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(38, -46, 12 + (opts.actionTick || 0) * 3.5, -1.0, 1.0);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     // Wind-up Gold Glint Telegraph (tells player: PARRY NOW!)
     if (opts.windupGlint) {
         var r = 8 + opts.windupGlint * 10;
@@ -652,6 +730,12 @@ function drawPlayerFighter(ctx, p, tick) {
     else if (p.action === 'block') parryAura = 'rgba(255, 224, 150, 0.65)';
     else if (p.parryCounterTimer > 0) parryAura = 'rgba(255, 184, 48, 0.55)';
 
+    var chargeTicks = p.attackChargeTicks || 0;
+    var rimColor = 'rgba(255, 235, 200, 0.42)';
+    if (chargeTicks >= CHARGE_MAX_TICKS) rimColor = '#ffd24c';
+    else if (chargeTicks >= CHARGE_VISUAL_TICKS) rimColor = '#38d9ff';
+    else if (p.parryCounterTimer > 0) rimColor = '#ffd24c';
+
     drawFighterSilhouette(ctx, {
         x: p.x,
         y: p.y,
@@ -660,9 +744,11 @@ function drawPlayerFighter(ctx, p, tick) {
         pose: pose,
         phase: (pose === 'run') ? p.walkCycle : (tick * 0.12),
         flash: p.flashTimer > 0,
-        rimColor: p.parryCounterTimer > 0 ? '#ffd24c' : 'rgba(255, 235, 200, 0.42)',
+        rimColor: rimColor,
         headbandColor: '#e62e25',
-        parryAura: parryAura
+        parryAura: parryAura,
+        chargeTicks: chargeTicks,
+        actionTick: p.actionTick || 0
     });
 }
 
@@ -713,6 +799,72 @@ function drawEnemyFighter(ctx, e, tick) {
 }
 
 function drawProjectile(ctx, pr) {
+    if (pr.kind === 'fireball') {
+        var dir = pr.vx >= 0 ? 1 : -1;
+        var r = pr.radius || 18;
+        var isSuper = pr.power === 2;
+        var wobble = Math.sin(pr.spin * 1.9) * 2.2;
+
+        ctx.save();
+        ctx.translate(pr.x, pr.y);
+        ctx.scale(dir, 1);
+
+        // Trailing comet chi wake
+        var tailLen = r * (isSuper ? 3.5 : 2.8);
+        var tailGrad = ctx.createLinearGradient(-tailLen, 0, r * 0.6, 0);
+        tailGrad.addColorStop(0, 'rgba(38, 184, 255, 0)');
+        tailGrad.addColorStop(0.55, isSuper ? 'rgba(255, 210, 76, 0.55)' : 'rgba(56, 217, 255, 0.50)');
+        tailGrad.addColorStop(1, isSuper ? 'rgba(126, 240, 255, 0.92)' : 'rgba(126, 240, 255, 0.85)');
+        ctx.fillStyle = tailGrad;
+        ctx.beginPath();
+        ctx.moveTo(-tailLen, wobble * 0.6);
+        ctx.quadraticCurveTo(-tailLen * 0.4, -r * 1.05 - wobble * 0.4, r * 0.25, -r * 0.85);
+        ctx.arc(0, 0, r * 0.92, -Math.PI * 0.45, Math.PI * 0.45);
+        ctx.quadraticCurveTo(-tailLen * 0.4, r * 1.05 + wobble * 0.4, -tailLen, wobble * 0.6);
+        ctx.closePath();
+        ctx.fill();
+
+        // Outer glowing chi aura
+        var auraGrad = ctx.createRadialGradient(2, 0, r * 0.2, 0, 0, r * 2.0);
+        if (isSuper) {
+            auraGrad.addColorStop(0, '#ffffff');
+            auraGrad.addColorStop(0.32, '#8ef4ff');
+            auraGrad.addColorStop(0.62, 'rgba(255, 210, 76, 0.78)');
+            auraGrad.addColorStop(1, 'rgba(255, 160, 40, 0)');
+        } else {
+            auraGrad.addColorStop(0, '#ffffff');
+            auraGrad.addColorStop(0.40, '#6ceaff');
+            auraGrad.addColorStop(0.72, 'rgba(38, 184, 255, 0.65)');
+            auraGrad.addColorStop(1, 'rgba(38, 184, 255, 0)');
+        }
+        ctx.fillStyle = auraGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Classic Hadouken leading energy wave crescents
+        ctx.strokeStyle = isSuper ? '#ffd24c' : '#a8f6ff';
+        ctx.lineWidth = isSuper ? 3.2 : 2.4;
+        ctx.beginPath();
+        ctx.arc(2, 0, r * 0.95 + wobble * 0.25, -1.15, 1.15);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.arc(-4, 0, r * 0.68 - wobble * 0.2, -1.05, 1.05);
+        ctx.stroke();
+
+        // White-hot inner energy core
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(3, 0, r * 0.56, r * 0.46, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+        return;
+    }
+
     ctx.save();
     ctx.translate(pr.x, pr.y);
     ctx.rotate(pr.spin);
@@ -861,6 +1013,34 @@ function drawHud(ctx, frame, viewW) {
     ctx.fillStyle = '#f5ead6';
     ctx.textAlign = 'left';
     ctx.fillText('HP ' + p.hp + '/' + p.maxHp + '   FLOOR ' + frame.floor, barX, barY - 8);
+
+    // Street Fighter Chi Charge Bar directly beneath HP bar when charging
+    var cTicks = p.attackChargeTicks || 0;
+    if (cTicks >= CHARGE_VISUAL_TICKS) {
+        var cBarY = barY + barH + 8;
+        var cBarH = 6;
+        var cRatio = Math.max(0, Math.min(1, cTicks / CHARGE_MAX_TICKS));
+        var cReadyRatio = CHARGE_READY_TICKS / CHARGE_MAX_TICKS;
+        var cIsMax = cTicks >= CHARGE_MAX_TICKS;
+        var cIsReady = cTicks >= CHARGE_READY_TICKS;
+
+        ctx.fillStyle = 'rgba(10, 6, 6, 0.78)';
+        ctx.fillRect(barX - 2, cBarY - 2, barW + 4, cBarH + 4);
+        ctx.fillStyle = cIsMax ? '#ffd24c' : (cIsReady ? '#5ce8ff' : '#2688c9');
+        ctx.fillRect(barX, cBarY, barW * cRatio, cBarH);
+
+        // Ready threshold tick mark
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(barX + barW * cReadyRatio - 1, cBarY - 1, 2, cBarH + 2);
+
+        ctx.strokeStyle = cIsMax ? '#ffd24c' : '#7ef0ff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX - 2, cBarY - 2, barW + 4, cBarH + 4);
+
+        ctx.font = 'bold 10px monospace';
+        ctx.fillStyle = cIsMax ? '#ffd24c' : (cIsReady ? '#7ef0ff' : '#b8d8e8');
+        ctx.fillText(cIsMax ? 'SUPER HADOU READY!' : (cIsReady ? 'HADOU READY! (RELEASE)' : 'CHARGING CHI...'), barX, cBarY + cBarH + 12);
+    }
 
     // Score & Combo (Top Center)
     ctx.textAlign = 'center';

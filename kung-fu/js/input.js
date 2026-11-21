@@ -24,6 +24,7 @@ function createLiveInput() {
     return {
         left: false,
         right: false,
+        attack: false,
         block: false,
         jumpLatch: false,
         attackLatch: false,
@@ -34,6 +35,7 @@ function createLiveInput() {
 function clearLiveInput(live) {
     live.left = false;
     live.right = false;
+    live.attack = false;
     live.block = false;
     live.jumpLatch = false;
     live.attackLatch = false;
@@ -42,17 +44,19 @@ function clearLiveInput(live) {
 
 function updateLiveHeldFlags(live) {
     var k = live.keysDown;
-    live.left  = !!(k['arrowleft']  || k['a'] || k['touch_left']);
-    live.right = !!(k['arrowright'] || k['d'] || k['touch_right']);
-    live.block = !!(k['shift'] || k['k'] || k['x'] || k['s'] || k['arrowdown'] || k['touch_block']);
+    live.left   = !!(k['arrowleft']  || k['a'] || k['touch_left']);
+    live.right  = !!(k['arrowright'] || k['d'] || k['touch_right']);
+    live.attack = !!(k[' '] || k['space'] || k['j'] || k['z'] || k['touch_attack']);
+    live.block  = !!(k['shift'] || k['k'] || k['x'] || k['s'] || k['arrowdown'] || k['touch_block']);
 }
 
 function liveInputKeyDown(live, key, code, isRepeat) {
     var lower = key.toLowerCase();
     live.keysDown[lower] = true;
+    if (code === 'Space') live.keysDown['space'] = true;
     updateLiveHeldFlags(live);
 
-    // Edge-triggered jump & attack so OS key-repeat never alters simulation
+    // Edge-triggered jump & initial attack tap; holding attack charges power ball
     if (!isRepeat) {
         if (lower === 'arrowup' || lower === 'w') {
             live.jumpLatch = true;
@@ -63,9 +67,10 @@ function liveInputKeyDown(live, key, code, isRepeat) {
     }
 }
 
-function liveInputKeyUp(live, key) {
+function liveInputKeyUp(live, key, code) {
     var lower = key.toLowerCase();
     live.keysDown[lower] = false;
+    if (code === 'Space' || lower === ' ') live.keysDown['space'] = false;
     updateLiveHeldFlags(live);
 }
 
@@ -76,6 +81,8 @@ function liveInputTouchButton(live, name, isPressed) {
     }
     if (name === 'attack') {
         if (isPressed) live.attackLatch = true;
+        live.keysDown['touch_attack'] = !!isPressed;
+        updateLiveHeldFlags(live);
         return;
     }
     live.keysDown['touch_' + name] = !!isPressed;
@@ -85,11 +92,11 @@ function liveInputTouchButton(live, name, isPressed) {
 // Samples one tick's bitmask from live hardware and clears edge latches
 function sampleLiveInput(live) {
     var mask = INPUT_NONE;
-    if (live.left)        mask |= INPUT_LEFT;
-    if (live.right)       mask |= INPUT_RIGHT;
-    if (live.jumpLatch)   mask |= INPUT_JUMP;
-    if (live.attackLatch) mask |= INPUT_ATTACK;
-    if (live.block)       mask |= INPUT_BLOCK;
+    if (live.left)                     mask |= INPUT_LEFT;
+    if (live.right)                    mask |= INPUT_RIGHT;
+    if (live.jumpLatch)                mask |= INPUT_JUMP;
+    if (live.attack || live.attackLatch) mask |= INPUT_ATTACK;
+    if (live.block)                    mask |= INPUT_BLOCK;
     live.jumpLatch = false;
     live.attackLatch = false;
     return mask;

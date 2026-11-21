@@ -61,8 +61,9 @@ function captureRenderFrame(simState, inputMask, stepResult) {
     for (var j = 0; j < simState.projectiles.length; j++) {
         var pr = simState.projectiles[j];
         projectiles[j] = {
-            id: pr.id, x: pr.x, y: pr.y, vx: pr.vx,
-            owner: pr.owner, spin: pr.spin
+            id: pr.id, kind: pr.kind || 'knife', x: pr.x, y: pr.y, vx: pr.vx,
+            owner: pr.owner, spin: pr.spin,
+            radius: pr.radius || 11, power: pr.power || 0
         };
     }
 
@@ -124,6 +125,7 @@ function captureRenderFrame(simState, inputMask, stepResult) {
             hp: p.hp, maxHp: p.maxHp, alive: p.alive,
             action: p.action, actionTick: p.actionTick, actionDuration: p.actionDuration,
             parryCounterTimer: p.parryCounterTimer, invulnTimer: p.invulnTimer,
+            attackChargeTicks: p.attackChargeTicks || 0,
             walkCycle: p.walkCycle, flashTimer: p.flashTimer
         } : null,
         enemies: enemies,
@@ -236,6 +238,7 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
             actionDuration: alpha < 0.5 ? p0.actionDuration : p1.actionDuration,
             parryCounterTimer: hud.player.parryCounterTimer,
             invulnTimer: hud.player.invulnTimer,
+            attackChargeTicks: lerp(p0.attackChargeTicks || 0, p1.attackChargeTicks || 0, alpha),
             walkCycle: lerp(p0.walkCycle, p1.walkCycle, alpha),
             flashTimer: hud.player.flashTimer
         };
@@ -287,11 +290,14 @@ function sampleBlendedReplayFrame(buf, floatIndex) {
         if (pr1) {
             bProj.push({
                 id: pr0.id,
+                kind: alpha < 0.5 ? (pr0.kind || 'knife') : (pr1.kind || 'knife'),
                 x: lerp(pr0.x, pr1.x, alpha),
                 y: lerp(pr0.y, pr1.y, alpha),
                 vx: alpha < 0.5 ? pr0.vx : pr1.vx,
                 owner: alpha < 0.5 ? pr0.owner : pr1.owner,
-                spin: lerp(pr0.spin, pr1.spin, alpha)
+                spin: lerp(pr0.spin, pr1.spin, alpha),
+                radius: alpha < 0.5 ? (pr0.radius || 11) : (pr1.radius || 11),
+                power: alpha < 0.5 ? (pr0.power || 0) : (pr1.power || 0)
             });
         } else if (alpha < 0.5) {
             bProj.push(pr0);

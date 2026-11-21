@@ -121,6 +121,20 @@ function playSimSoundEvents(audio, stepResult) {
                 audio.gongSynth.triggerAttackRelease(['D4', 'E4', 'G4', 'A4', 'D5'], 0.45, t);
             } else if (ev === 'wave_clear') {
                 audio.gongSynth.triggerAttackRelease(['G4', 'A4', 'D5'], 0.22, t);
+            } else if (ev === 'charge_start') {
+                audio.blockSynth.triggerAttackRelease('C4', '32n', t);
+            } else if (ev === 'charge_ready') {
+                audio.gongSynth.triggerAttackRelease(['E5', 'B5'], 0.14, t);
+            } else if (ev === 'charge_max') {
+                audio.gongSynth.triggerAttackRelease(['A5', 'D6', 'E6'], 0.22, t);
+            } else if (ev === 'fireball') {
+                audio.swingSynth.triggerAttackRelease('8n', t);
+                audio.hitSynth.triggerAttackRelease('E2', '16n', t);
+                audio.blockSynth.triggerAttackRelease('A4', '16n', t);
+            } else if (ev === 'super_fireball') {
+                audio.swingSynth.triggerAttackRelease('4n', t);
+                audio.hitSynth.triggerAttackRelease('C2', '8n', t);
+                audio.gongSynth.triggerAttackRelease(['D4', 'A4', 'D5', 'A5'], 0.35, t);
             } else if (ev === 'player_ko') {
                 audio.hitSynth.triggerAttackRelease('C1', '2n', t);
                 audio.gongSynth.triggerAttackRelease(['D2', 'F2', 'A2'], 0.65, t);

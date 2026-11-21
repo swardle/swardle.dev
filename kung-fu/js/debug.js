@@ -74,6 +74,8 @@ function hashSimState(state) {
         h = fnv1aMixUint32(h, p.comboStep);
         h = fnv1aMixUint32(h, p.parryCounterTimer);
         h = fnv1aMixUint32(h, p.blockHeldTicks);
+        h = fnv1aMixUint32(h, p.attackHeld ? 1 : 0);
+        h = fnv1aMixUint32(h, p.attackChargeTicks);
         h = fnv1aMixUint32(h, p.invulnTimer);
     }
 
@@ -96,10 +98,12 @@ function hashSimState(state) {
     for (var j = 0; j < state.projectiles.length; j++) {
         var pr = state.projectiles[j];
         h = fnv1aMixUint32(h, pr.id);
+        h = fnv1aMixString(h, pr.kind || 'knife');
         h = fnv1aMixFloat64(h, pr.x);
         h = fnv1aMixFloat64(h, pr.y);
         h = fnv1aMixFloat64(h, pr.vx);
         h = fnv1aMixString(h, pr.owner);
+        h = fnv1aMixUint32(h, pr.hitsLeft || 0);
         h = fnv1aMixUint32(h, pr.life);
     }
 
@@ -342,6 +346,9 @@ function checkSimInvariants(sim) {
     }
     if (p.hp < 0 || p.hp > p.maxHp || !Number.isFinite(p.hp)) {
         return 'player invalid HP: ' + p.hp;
+    }
+    if (p.attackChargeTicks < 0 || p.attackChargeTicks > CHARGE_MAX_TICKS) {
+        return 'player invalid charge: ' + p.attackChargeTicks;
     }
     for (var i = 0; i < sim.enemies.length; i++) {
         var e = sim.enemies[i];

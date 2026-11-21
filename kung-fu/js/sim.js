@@ -17,8 +17,12 @@ var GRAVITY            = 0.72;
 var JUMP_VEL           = -14.2;
 var PLAYER_SPEED       = 4.6;
 var PLAYER_AIR_SPEED   = 4.2;
+var PLAYER_MAX_HP      = 200;
 var PARRY_WINDOW_TICKS = 11;
 var COUNTER_WINDOW     = 34;
+var CHARGE_VISUAL_TICKS = 12;
+var CHARGE_READY_TICKS  = 34;
+var CHARGE_MAX_TICKS    = 62;
 
 var FLOOR_NAMES = [
     'CRIMSON COURTYARD',
@@ -59,8 +63,8 @@ function createPlayer(state) {
         vy: 0,
         facing: 1,
         onGround: true,
-        hp: 100,
-        maxHp: 100,
+        hp: PLAYER_MAX_HP,
+        maxHp: PLAYER_MAX_HP,
         alive: true,
         action: 'idle',
         actionTick: 0,
@@ -72,6 +76,8 @@ function createPlayer(state) {
         jumpBuffer: 0,
         parryCounterTimer: 0,
         blockHeldTicks: 0,
+        attackHeld: false,
+        attackChargeTicks: 0,
         invulnTimer: 0,
         walkCycle: 0,
         flashTimer: 0
@@ -190,6 +196,7 @@ function cloneSimState(state) {
             swingId: p.swingId, comboStep: p.comboStep, comboWindow: p.comboWindow,
             attackBuffer: p.attackBuffer, jumpBuffer: p.jumpBuffer,
             parryCounterTimer: p.parryCounterTimer, blockHeldTicks: p.blockHeldTicks,
+            attackHeld: p.attackHeld, attackChargeTicks: p.attackChargeTicks,
             invulnTimer: p.invulnTimer, walkCycle: p.walkCycle, flashTimer: p.flashTimer
         } : null,
         enemies: cloneArrayOfFlatObjects(state.enemies),
@@ -260,6 +267,7 @@ function spawnEnemy(state, kind, x, facing) {
         attackStyle: 'melee', // 'melee', 'throw', 'slam'
         cooldown: 22 + rngInt(state.rng, 0, 24),
         lastHitSwingId: -1,
+        lastHitProjId: -1,
         didHitPlayer: false,
         walkCycle: rngRange(state.rng, 0, 6.28),
         flashTimer: 0
@@ -450,10 +458,12 @@ function advanceToNextFloor(state, soundEvents) {
     p.vy = 0;
     p.facing = 1;
     p.onGround = true;
-    p.hp = Math.min(p.maxHp, p.hp + 35);
+    p.hp = Math.min(p.maxHp, p.hp + 70);
     p.action = 'idle';
     p.actionTick = 0;
     p.actionDuration = 0;
+    p.attackHeld = false;
+    p.attackChargeTicks = 0;
     p.invulnTimer = 30;
 
     var fName = FLOOR_NAMES[(state.floor - 1) % FLOOR_NAMES.length];
@@ -511,6 +521,52 @@ function startPlayerAttack(state, p, soundEvents) {
     var slashColor = (moveName === 'counter' || moveName === 'attack3') ? '#ffb830' : '#d92828';
     spawnSlashArc(state, p.x + p.facing * 24, p.y - 46, p.facing, slashStyle, slashColor);
     soundEvents.push(moveName === 'counter' || moveName === 'attack3' ? 'heavy_swing' : 'swing');
+}
+
+function startPlayerHadouken(state, p, chargeTicks, soundEvents) {
+    var isMax = chargeTicks >= CHARGE_MAX_TICKS;
+    var power = isMax ? 2 : 1;
+    var radius = isMax ? 25 : 18;
+    var speed = isMax ? 10.6 : 8.8;
+    var damage = isMax ? 54 : 34;
+    var hitsLeft = isMax ? 4 : 2;
+
+    p.action = 'hadouken';
+    p.actionTick = 0;
+    p.actionDuration = 18;
+    p.comboStep = 0;
+    p.comboWindow = 0;
+    p.attackBuffer = 0;
+    p.vx = -p.facing * (isMax ? 3.2 : 2.0);
+    if (!p.onGround) {
+        p.vy = Math.min(p.vy, 1.0);
+    }
+
+    var spawnX = p.x + p.facing * 36;
+    var spawnY = p.y - 46;
+    state.projectiles.push({
+        id: allocEntityId(state),
+        kind: 'fireball',
+        x: spawnX,
+        y: spawnY,
+        vx: p.facing * speed,
+        vy: 0,
+        owner: 'player',
+        damage: damage,
+        radius: radius,
+        power: power,
+        hitsLeft: hitsLeft,
+        spin: 0,
+        life: 110
+    });
+
+    var color = isMax ? '#ffd24c' : '#38d9ff';
+    spawnRingEffect(state, spawnX, spawnY, color, isMax ? 78 : 54);
+    spawnParticles(state, spawnX, spawnY, isMax ? 18 : 11, color, 2.2, 7.2, 0.8);
+    spawnParticles(state, spawnX, spawnY, 6, '#ffffff', 1.5, 4.5, 0.4);
+    spawnCallout(state, p.x + p.facing * 12, p.y - 86, isMax ? 'SUPER HADOU!' : 'HADOU!', color);
+    state.screenShake = Math.max(state.screenShake, isMax ? 7.5 : 4.2);
+    soundEvents.push(isMax ? 'super_fireball' : 'fireball');
 }
 
 function damageEnemy(state, e, dmg, kx, ky, stopTicks, fromCounter, soundEvents) {
@@ -585,7 +641,8 @@ function hitPlayer(state, dmg, knockDir, attackerEnemy, isProjectile, soundEvent
         p.actionDuration = 14;
         p.parryCounterTimer = COUNTER_WINDOW;
         p.invulnTimer = 14;
-        p.hp = Math.min(p.maxHp, p.hp + 4); // small martial-arts focus heal
+        p.attackChargeTicks = 0;
+        p.hp = Math.min(p.maxHp, p.hp + 8); // small martial-arts focus heal
         state.parriesLanded += 1;
         state.score += 150;
         state.hitstopTimer = 5;
@@ -611,6 +668,7 @@ function hitPlayer(state, dmg, knockDir, attackerEnemy, isProjectile, soundEvent
         p.hp = Math.max(1, p.hp - chip);
         p.vx = knockDir * 3.0;
         p.invulnTimer = 10;
+        p.attackChargeTicks = 0;
         spawnParticles(state, p.x + p.facing * 18, p.y - 44, 6, '#e8dcc0', 1.5, 4.0, 0.5);
         soundEvents.push('block');
         return 'block';
@@ -625,6 +683,7 @@ function hitPlayer(state, dmg, knockDir, attackerEnemy, isProjectile, soundEvent
     p.comboStep = 0;
     p.comboWindow = 0;
     p.parryCounterTimer = 0;
+    p.attackChargeTicks = 0;
     state.comboCount = 0;
     state.comboDecayTimer = 0;
     state.screenShake = 7.0;
@@ -704,8 +763,12 @@ function stepSimulation(state, inputMask) {
         if (state.comboDecayTimer === 0) state.comboCount = 0;
     }
 
-    if (attack) p.attackBuffer = 8;
-    if (jump)   p.jumpBuffer = 8;
+    var attackJustPressed = attack && !p.attackHeld;
+    var attackJustReleased = !attack && p.attackHeld;
+    var releasedChargeTicks = p.attackChargeTicks;
+
+    if (attackJustPressed) p.attackBuffer = 8;
+    if (jump)              p.jumpBuffer = 8;
 
     // Track block hold duration for Perfect Parry timing
     if (block) {
@@ -714,11 +777,38 @@ function stepSimulation(state, inputMask) {
         p.blockHeldTicks = 0;
     }
 
+    // Track attack hold duration for Street Fighter Power Ball charge-up
+    if (attack && p.action !== 'hurt' && p.action !== 'parry' && p.action !== 'block' && p.action !== 'ko') {
+        if (p.attackChargeTicks < CHARGE_MAX_TICKS) {
+            p.attackChargeTicks += 1;
+            if (p.attackChargeTicks === CHARGE_VISUAL_TICKS) {
+                soundEvents.push('charge_start');
+            } else if (p.attackChargeTicks === CHARGE_READY_TICKS) {
+                spawnRingEffect(state, p.x - p.facing * 6, p.y - 44, '#38d9ff', 44);
+                spawnParticles(state, p.x - p.facing * 6, p.y - 44, 8, '#38d9ff', 1.5, 4.2, 0.5);
+                soundEvents.push('charge_ready');
+            } else if (p.attackChargeTicks === CHARGE_MAX_TICKS) {
+                spawnRingEffect(state, p.x - p.facing * 6, p.y - 44, '#ffd24c', 64);
+                spawnParticles(state, p.x - p.facing * 6, p.y - 44, 14, '#ffd24c', 2.0, 5.8, 0.8);
+                soundEvents.push('charge_max');
+            }
+        }
+    } else if (!attack) {
+        p.attackChargeTicks = 0;
+    }
+    p.attackHeld = attack;
+
     // --- 1. Player State Machine ---
     var isAttacking = (p.action === 'attack1' || p.action === 'attack2' ||
                        p.action === 'attack3' || p.action === 'airkick' || p.action === 'counter');
+    var canReleaseHadouken = attackJustReleased && releasedChargeTicks >= CHARGE_READY_TICKS &&
+        p.action !== 'hurt' && p.action !== 'parry' && p.action !== 'block' && p.action !== 'ko';
 
-    if (p.action === 'hurt' || p.action === 'parry') {
+    if (canReleaseHadouken) {
+        if (left && !right) p.facing = -1;
+        else if (right && !left) p.facing = 1;
+        startPlayerHadouken(state, p, releasedChargeTicks, soundEvents);
+    } else if (p.action === 'hurt' || p.action === 'parry' || p.action === 'hadouken') {
         p.actionTick += 1;
         p.vx *= 0.84;
         if (p.actionTick >= p.actionDuration) {
@@ -780,11 +870,15 @@ function stepSimulation(state, inputMask) {
             p.attackBuffer = 0;
             startPlayerAttack(state, p, soundEvents);
         } else if (p.actionTick >= p.actionDuration) {
-            p.action = p.onGround ? 'idle' : 'jump';
+            if (p.onGround && p.attackHeld && p.attackChargeTicks >= CHARGE_VISUAL_TICKS) {
+                p.action = 'charge';
+            } else {
+                p.action = p.onGround ? 'idle' : 'jump';
+            }
             p.actionTick = 0;
         }
     } else {
-        // Free movement / Block / Jump / Attack transitions
+        // Free movement / Block / Charge / Jump / Attack transitions
         if (left && !right) {
             p.facing = -1;
         } else if (right && !left) {
@@ -792,6 +886,7 @@ function stepSimulation(state, inputMask) {
         }
 
         if (block && p.onGround && p.attackBuffer === 0) {
+            p.attackChargeTicks = 0;
             p.action = 'block';
             p.vx *= 0.72;
         } else if (p.attackBuffer > 0) {
@@ -805,6 +900,11 @@ function stepSimulation(state, inputMask) {
             p.actionTick = 0;
             spawnParticles(state, p.x, GROUND_Y, 5, '#332b24', 0.8, 2.6, 0.8);
             soundEvents.push('jump');
+        } else if (p.onGround && p.attackHeld && p.attackChargeTicks >= CHARGE_VISUAL_TICKS) {
+            p.action = 'charge';
+            p.actionTick += 1;
+            p.vx *= 0.72;
+            if (Math.abs(p.vx) < 0.12) p.vx = 0;
         } else {
             var moveSpd = p.onGround ? PLAYER_SPEED : PLAYER_AIR_SPEED;
             if (left && !right) {
@@ -926,6 +1026,7 @@ function stepSimulation(state, inputMask) {
                     e.stateDur = 14;
                     state.projectiles.push({
                         id: allocEntityId(state),
+                        kind: 'knife',
                         x: e.x + e.facing * 24,
                         y: e.y - 48 * e.scale,
                         vx: e.facing * (6.2 + Math.min(2.0, (state.floor - 1) * 0.45)),
@@ -1069,12 +1170,12 @@ function stepSimulation(state, inputMask) {
         if (e.x > FLOOR_LENGTH - 18) e.x = FLOOR_LENGTH - 18;
     }
 
-    // --- 5. Projectiles (Thrown Knives — Parryable Back Into Enemies!) ---
+    // --- 5. Projectiles (Thrown Knives & Charged Power Balls!) ---
     for (var pi = state.projectiles.length - 1; pi >= 0; pi--) {
         var pr = state.projectiles[pi];
         pr.x += pr.vx;
         pr.y += pr.vy;
-        pr.spin += 0.42;
+        pr.spin += (pr.kind === 'fireball') ? 0.28 : 0.42;
         pr.life -= 1;
 
         var removeProj = (pr.life <= 0 || pr.x < state.cameraX - 120 || pr.x > state.cameraX + state.setup.viewWidth + 120);
@@ -1092,13 +1193,63 @@ function stepSimulation(state, inputMask) {
                     removeProj = true;
                 }
             }
-        } else if (!removeProj && pr.owner === 'player') {
+        } else if (!removeProj && pr.owner === 'player' && pr.kind === 'fireball') {
+            var fbRad = pr.radius || 18;
+            var fbColor = pr.power === 2 ? '#ffd24c' : '#38d9ff';
+
+            // Vaporize incoming enemy projectiles on clash
+            for (var oi = state.projectiles.length - 1; oi >= 0; oi--) {
+                if (oi === pi) continue;
+                var otherPr = state.projectiles[oi];
+                if (otherPr.owner === 'enemy' && otherPr.life > 0 &&
+                    Math.abs(pr.x - otherPr.x) < fbRad + 14 && Math.abs(pr.y - otherPr.y) < fbRad + 14) {
+                    otherPr.life = 0;
+                    spawnParticles(state, otherPr.x, otherPr.y, 8, fbColor, 1.8, 5.2, 0.5);
+                    state.score += 25;
+                    soundEvents.push('block');
+                }
+            }
+
+            // Smash rolling barrels in its path
+            for (var bt = state.traps.length - 1; bt >= 0; bt--) {
+                var bTr = state.traps[bt];
+                if (bTr.kind === 'barrel' && Math.abs(pr.x - bTr.x) < fbRad + 18 &&
+                    Math.abs(pr.y - (bTr.y - 18)) < fbRad + 24) {
+                    spawnParticles(state, bTr.x, bTr.y - 18, 12, '#d97828', 2.0, 6.0, 2.0);
+                    spawnParticles(state, bTr.x, bTr.y - 18, 8, fbColor, 1.5, 5.0, 1.0);
+                    state.score += 75;
+                    soundEvents.push('hit');
+                    state.traps.splice(bt, 1);
+                }
+            }
+
+            // Blast through enemies (multi-hit piercing based on charge power!)
             for (var ej = state.enemies.length - 1; ej >= 0; ej--) {
                 var target = state.enemies[ej];
-                if (Math.abs(pr.x - target.x) < 26 * target.scale &&
-                    pr.y >= target.y - 78 * target.scale && pr.y <= target.y) {
-                    var killed = damageEnemy(state, target, pr.damage, pr.vx >= 0 ? 7.5 : -7.5, -3.5, 4, true, soundEvents);
+                if (target.lastHitProjId === pr.id) continue;
+                if (Math.abs(pr.x - target.x) < fbRad + 20 * target.scale &&
+                    pr.y + fbRad >= target.y - 78 * target.scale && pr.y - fbRad <= target.y) {
+                    target.lastHitProjId = pr.id;
+                    var kx = (pr.vx >= 0 ? 1 : -1) * (pr.power === 2 ? 12.0 : 9.0);
+                    var ky = pr.power === 2 ? -5.5 : -4.0;
+                    var killed = damageEnemy(state, target, pr.damage, kx, ky, pr.power === 2 ? 5 : 4, pr.power === 2, soundEvents);
+                    spawnRingEffect(state, pr.x, pr.y, fbColor, pr.power === 2 ? 68 : 48);
+                    spawnParticles(state, pr.x, pr.y, pr.power === 2 ? 14 : 9, fbColor, 2.0, 6.8, 0.8);
                     if (killed) state.enemies.splice(ej, 1);
+                    pr.hitsLeft = (pr.hitsLeft || 1) - 1;
+                    if (pr.hitsLeft <= 0) {
+                        removeProj = true;
+                        break;
+                    }
+                }
+            }
+        } else if (!removeProj && pr.owner === 'player') {
+            for (var ej2 = state.enemies.length - 1; ej2 >= 0; ej2--) {
+                var target2 = state.enemies[ej2];
+                if (Math.abs(pr.x - target2.x) < 26 * target2.scale &&
+                    pr.y >= target2.y - 78 * target2.scale && pr.y <= target2.y) {
+                    var killed2 = damageEnemy(state, target2, pr.damage, pr.vx >= 0 ? 7.5 : -7.5, -3.5, 4, true, soundEvents);
+                    if (killed2) state.enemies.splice(ej2, 1);
                     removeProj = true;
                     break;
                 }

@@ -13,6 +13,9 @@ function createAiState() {
         jumpCooldown: 0,
         retreatTicks: 0,
         retreatDir: 0,
+        chargeHoldTicks: 0,
+        chargeTarget: 0,
+        fireballCooldown: 0,
         lastMode: 'advance'
     };
 }
@@ -23,6 +26,9 @@ function resetAiState(ai) {
     ai.jumpCooldown = 0;
     ai.retreatTicks = 0;
     ai.retreatDir = 0;
+    ai.chargeHoldTicks = 0;
+    ai.chargeTarget = 0;
+    ai.fireballCooldown = 0;
     ai.lastMode = 'advance';
 }
 
@@ -35,11 +41,13 @@ function computeAiInput(ai, simState) {
 
     if (ai.attackCooldown > 0) ai.attackCooldown -= 1;
     if (ai.jumpCooldown > 0) ai.jumpCooldown -= 1;
+    if (ai.fireballCooldown > 0) ai.fireballCooldown -= 1;
 
     var mask = INPUT_NONE;
 
     // 1. Instant Crimson Counter right after landing a Perfect Parry!
     if (p.parryCounterTimer > 0 && p.action !== 'parry' && ai.attackCooldown === 0) {
+        ai.chargeHoldTicks = 0;
         ai.attackCooldown = 8;
         ai.lastMode = 'counter';
         return INPUT_ATTACK;
@@ -47,6 +55,7 @@ function computeAiInput(ai, simState) {
 
     // Continue brief block hold if actively guarding/parrying
     if (ai.blockHoldLeft > 0) {
+        ai.chargeHoldTicks = 0;
         ai.blockHoldLeft -= 1;
         ai.lastMode = 'parry';
         return INPUT_BLOCK;
@@ -60,6 +69,7 @@ function computeAiInput(ai, simState) {
         var approaching = (pdx > 0 && pr.vx < 0) || (pdx < 0 && pr.vx > 0);
         if (approaching && Math.abs(pdx) < 62) {
             if (p.onGround) {
+                ai.chargeHoldTicks = 0;
                 ai.blockHoldLeft = 6;
                 ai.lastMode = 'parry';
                 return INPUT_BLOCK;
@@ -74,6 +84,7 @@ function computeAiInput(ai, simState) {
             var bdx = tr.x - p.x;
             var bApproaching = (bdx > 0 && tr.vx < 0) || (bdx < 0 && tr.vx > 0);
             if (bApproaching && Math.abs(bdx) < 88 && p.onGround && ai.jumpCooldown === 0) {
+                ai.chargeHoldTicks = 0;
                 ai.jumpCooldown = 28;
                 ai.lastMode = 'evade';
                 mask |= INPUT_JUMP;
@@ -83,6 +94,7 @@ function computeAiInput(ai, simState) {
         } else if (tr.kind === 'tile' && tr.telegraph <= 16) {
             var tdx = tr.x - p.x;
             if (Math.abs(tdx) < 44) {
+                ai.chargeHoldTicks = 0;
                 ai.lastMode = 'evade';
                 return (tdx >= 0) ? INPUT_LEFT : INPUT_RIGHT;
             }
@@ -109,6 +121,7 @@ function computeAiInput(ai, simState) {
         }
 
         if (en.state === 'windup' && en.attackStyle === 'melee' && absDx <= en.range + 30 && p.onGround) {
+            ai.chargeHoldTicks = 0;
             if (en.stateDur - en.stateTick <= 10) {
                 ai.blockHoldLeft = 8;
                 ai.lastMode = 'parry';
@@ -120,11 +133,13 @@ function computeAiInput(ai, simState) {
         }
         if (en.state === 'attack' && en.attackStyle === 'melee' && en.stateTick <= 4 &&
             absDx <= en.range + 24 && p.onGround) {
+            ai.chargeHoldTicks = 0;
             ai.blockHoldLeft = 5;
             ai.lastMode = 'parry';
             return INPUT_BLOCK;
         }
         if (en.state === 'leap' && en.vy > 1.5 && absDx < 112 && p.onGround && ai.jumpCooldown === 0) {
+            ai.chargeHoldTicks = 0;
             ai.jumpCooldown = 30;
             ai.lastMode = 'evade';
             return INPUT_JUMP | (dx >= 0 ? INPUT_LEFT : INPUT_RIGHT);
@@ -133,8 +148,50 @@ function computeAiInput(ai, simState) {
 
     // 5. If no enemies on screen, march right through the pagoda!
     if (!nearest || nearestDist > 520) {
+        ai.chargeHoldTicks = 0;
         ai.lastMode = 'advance';
         return INPUT_RIGHT;
+    }
+
+    // 5b. Continue or launch a Street Fighter Charged Power Ball!
+    var targetDx = nearest.x - p.x;
+    var desiredDir = targetDx >= 0 ? 1 : -1;
+
+    if (ai.chargeHoldTicks > 0) {
+        if (!p.onGround || p.action === 'hurt' || nearestDist < 82) {
+            // Release early if already charged, else abort charge for melee
+            ai.chargeHoldTicks = 0;
+            if (p.attackChargeTicks >= CHARGE_READY_TICKS) {
+                ai.fireballCooldown = 140;
+                ai.lastMode = 'hadouken';
+                return (p.facing !== desiredDir) ? (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT) : INPUT_NONE;
+            }
+        } else if (p.attackChargeTicks >= ai.chargeTarget) {
+            ai.chargeHoldTicks = 0;
+            ai.fireballCooldown = 180;
+            ai.lastMode = 'hadouken';
+            return (p.facing !== desiredDir) ? (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT) : INPUT_NONE;
+        } else {
+            ai.chargeHoldTicks += 1;
+            ai.lastMode = 'charge';
+            mask = INPUT_ATTACK;
+            if (p.facing !== desiredDir) {
+                mask |= (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT);
+            }
+            return mask;
+        }
+    }
+
+    if (ai.fireballCooldown === 0 && p.onGround && nearestDist >= 210 && nearestDist <= 420 &&
+        !(leftCount > 0 && rightCount > 0)) {
+        ai.chargeHoldTicks = 1;
+        ai.chargeTarget = (simState.tick % 2 === 0) ? (CHARGE_READY_TICKS + 4) : CHARGE_MAX_TICKS;
+        ai.lastMode = 'charge';
+        mask = INPUT_ATTACK;
+        if (p.facing !== desiredDir) {
+            mask |= (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT);
+        }
+        return mask;
     }
 
     // 6. Escape if surrounded tightly on both sides
@@ -152,9 +209,6 @@ function computeAiInput(ai, simState) {
     }
 
     // 7. Engage Nearest Enemy
-    var targetDx = nearest.x - p.x;
-    var desiredDir = targetDx >= 0 ? 1 : -1;
-
     if (p.facing !== desiredDir) {
         mask |= (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT);
     }
@@ -166,8 +220,8 @@ function computeAiInput(ai, simState) {
         return mask;
     }
 
-    if (p.onGround && nearestDist > 125 && nearestDist < 185 &&
-        (nearest.kind === 'knife' || (simState.tick % 97 === 0)) && ai.jumpCooldown === 0) {
+    if (p.onGround && nearestDist > 125 && nearestDist < 195 &&
+        (nearest.kind === 'knife' || (simState.tick % 71 === 0)) && ai.jumpCooldown === 0) {
         ai.jumpCooldown = 40;
         ai.lastMode = 'jump_kick';
         mask |= INPUT_JUMP | (desiredDir > 0 ? INPUT_RIGHT : INPUT_LEFT);

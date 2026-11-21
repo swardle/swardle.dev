@@ -8,8 +8,8 @@
 
 // Golden hashes locked against deterministic shared/math.js + shared/rng.js +
 // kung-fu/js/sim.js + kung-fu/js/ai.js. Verified across all engines.
-var KF_GOLDEN_AI_SEED_1_HASH = '0x0142de87'; // 0x51A7BEEF, 2400 ticks
-var KF_GOLDEN_AI_SEED_2_HASH = '0x08b0de1b'; // 0xD3000001, 2400 ticks
+var KF_GOLDEN_AI_SEED_1_HASH = '0xd85f1eee'; // 0x51A7BEEF, 2400 ticks
+var KF_GOLDEN_AI_SEED_2_HASH = '0x3966a7af'; // 0xD3000001, 2400 ticks
 
 function kfAssert(cond, msg) {
     if (!cond) {
@@ -59,11 +59,16 @@ function runKungFuTestSuite() {
         var m1 = sampleLiveInput(live);
         kfAssert(m1 === (INPUT_RIGHT | INPUT_ATTACK | INPUT_JUMP), 'Expected RIGHT|ATTACK|JUMP, got ' + m1);
 
-        // Repeat events must not re-fire edge-triggered jump/attack
+        // Repeat events must not re-fire edge-triggered jump, while holding attack stays held for charge-up
         liveInputKeyDown(live, ' ', 'Space', true);
         liveInputKeyDown(live, 'w', 'KeyW', true);
         var m2 = sampleLiveInput(live);
-        kfAssert(m2 === INPUT_RIGHT, 'Expected RIGHT only on key repeat, got ' + m2);
+        kfAssert(m2 === (INPUT_RIGHT | INPUT_ATTACK), 'Expected RIGHT|ATTACK while holding attack, got ' + m2);
+
+        // Releasing attack clears held attack bit
+        liveInputKeyUp(live, ' ', 'Space');
+        var m2b = sampleLiveInput(live);
+        kfAssert(m2b === INPUT_RIGHT, 'Expected RIGHT only after releasing attack, got ' + m2b);
 
         // Touch multi-button + clear
         liveInputTouchButton(live, 'block', true);
@@ -146,6 +151,58 @@ function runKungFuTestSuite() {
         for (var t = 0; t < 25; t++) stepSimulation(sim, INPUT_NONE);
         kfAssert(thrower.hp < thrower.maxHp || sim.enemies.length === 0, 'Deflected knife did not damage enemy');
         return 'parries=' + sim.parriesLanded + ' deflected knife hit enemy';
+    });
+
+    // 3b. Charged Street Fighter Power Ball (Hadouken) Launch, Knife Clash, & Super Pierce
+    runCase('Attack charge-up launches Power Ball, clashes knives, & pierces enemies', function () {
+        var sim = createSimState({ seed: 303, viewWidth: 800, viewHeight: 450, tickRate: 60 });
+        sim.enemies = [];
+        sim.player.x = 180;
+        sim.player.facing = 1;
+        var e1 = spawnEnemy(sim, 'brawler', 360, -1);
+        var e2 = spawnEnemy(sim, 'brawler', 430, -1);
+        e1.cooldown = 999;
+        e2.cooldown = 999;
+
+        // Hold attack until CHARGE_READY_TICKS -> enters 'charge' stance
+        for (var c = 0; c < CHARGE_READY_TICKS; c++) {
+            stepSimulation(sim, INPUT_ATTACK);
+        }
+        kfAssert(sim.player.action === 'charge', 'Expected charge stance while holding attack, got ' + sim.player.action);
+        kfAssert(sim.player.attackChargeTicks === CHARGE_READY_TICKS, 'Expected charge ticks ' + CHARGE_READY_TICKS + ', got ' + sim.player.attackChargeTicks);
+
+        // Place an incoming enemy knife in front of the player
+        sim.projectiles.push({
+            id: allocEntityId(sim), kind: 'knife',
+            x: 270, y: GROUND_Y - 46, vx: -6.0, vy: 0,
+            owner: 'enemy', damage: 11, spin: 0, life: 80
+        });
+
+        // Release attack -> fires Power Ball!
+        stepSimulation(sim, INPUT_NONE);
+        kfAssert(sim.player.action === 'hadouken', 'Expected hadouken release pose, got ' + sim.player.action);
+        var fb = null;
+        for (var pIdx = 0; pIdx < sim.projectiles.length; pIdx++) {
+            if (sim.projectiles[pIdx].kind === 'fireball') fb = sim.projectiles[pIdx];
+        }
+        kfAssert(fb !== null && fb.owner === 'player' && fb.power === 1, 'Expected player tier-1 fireball projectile');
+
+        // Let Power Ball vaporize the knife and blast through both brawlers
+        for (var f = 0; f < 45; f++) stepSimulation(sim, INPUT_NONE);
+        kfAssert(sim.enemiesDefeated === 2 && sim.enemies.length === 0,
+            'Expected Power Ball to defeat both brawlers, defeated=' + sim.enemiesDefeated);
+
+        // Full charge (CHARGE_MAX_TICKS) fires a Super Power Ball (power === 2)
+        for (var m = 0; m < CHARGE_MAX_TICKS; m++) {
+            stepSimulation(sim, INPUT_ATTACK);
+        }
+        kfAssert(sim.player.attackChargeTicks === CHARGE_MAX_TICKS, 'Expected max charge cap');
+        stepSimulation(sim, INPUT_NONE);
+        var superFb = sim.projectiles.length > 0 ? sim.projectiles[sim.projectiles.length - 1] : null;
+        kfAssert(superFb && superFb.kind === 'fireball' && superFb.power === 2 && superFb.hitsLeft === 4,
+            'Expected tier-2 Super Power Ball with 4 pierce hits');
+
+        return 'charge->hadouken + knife clash + 2x KO + super power ball OK';
     });
 
     // 4. Replay Ring Buffer Wraparound, Blending, & Play-From-Here Restore
